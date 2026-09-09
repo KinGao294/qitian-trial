@@ -73,12 +73,20 @@ function warrior(_enemy=false,boss=false){
  g.userData={legs:[] as T.Object3D[],pivot,torso,visual,orient,baseYaw:0,movePose:0};
  scene.add(g);return g;
 }
-function groundOrient(orient:T.Group){
+let boneNamesLogged=false;
+function groundOrient(orient:T.Group,kind:'player'|'boss'='player'){
  orient.updateWorldMatrix(true,true);
- const box=new T.Box3().setFromObject(orient);
- orient.position.y-=box.min.y;
- orient.position.y+=.02;
- console.info('[trial] groundOrient',{minY:box.min.y,positionY:orient.position.y,maxY:box.max.y});
+ const box=new T.Box3();
+ try{box.setFromObject(orient,true);}catch{box.setFromObject(orient);}
+ let boneMin=Infinity;
+ const names:string[]=[];
+ orient.traverse(o=>{const n=o.name||'';if(/Limb|Root|Foot|leg|Leg/i.test(n))names.push(n);if(/tripo0_.*Limb_3|0_.*Limb_3|Foot|Ankle/i.test(n)){const w=new T.Vector3();o.getWorldPosition(w);boneMin=Math.min(boneMin,w.y);}});
+ let minY=box.min.y;if(Number.isFinite(boneMin))minY=Math.min(minY,boneMin);
+ orient.position.y-=minY;
+ const clear=kind==='player'?.75:.15;orient.position.y+=clear;
+ if(kind==='player')orient.position.y=Math.max(orient.position.y,.7);
+ if(!boneNamesLogged){console.info('[trial] bone-like names',names.slice(0,40));boneNamesLogged=true;}
+ console.info('[trial] groundOrient',{kind,boxMin:box.min.y,boneMin,clear,positionY:orient.position.y,boxMax:box.max.y});
 }
 
 const player=warrior();player.position.set(0,0,12);
@@ -87,7 +95,7 @@ const enemies:Enemy[]=[];for(const [x,z,boss] of [[0,-7,1]]){const mesh=warrior(
 const gltfLoader=new GLTFLoader(manager);
 let playerMixer:T.AnimationMixer|undefined; let locoActions:{idle?:T.AnimationAction,walk?:T.AnimationAction}={}; let mixerActive=false; let hitstop=0;
 const MOVE_NAMES=['横扫破风','挑棍穿云','旋砸定山'];
-async function loadCharacter(root:T.Group,file:string,targetHeight:number){ const {scene:model}=await gltfLoader.loadAsync(assetUrl(`models/${file}.glb`)); model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m&&'envMapIntensity' in m){(m as T.MeshStandardMaterial).envMapIntensity=1.15;(m as T.MeshStandardMaterial).needsUpdate=true;}}}); const orient=root.userData.orient as T.Group; orient.clear(); orient.rotation.set(0,-Math.PI/2,0); model.scale.setScalar(1);model.position.set(0,0,0);model.rotation.set(0,0,0);orient.add(model);orient.updateWorldMatrix(true,true);const bb=new T.Box3().setFromObject(orient);const h=Math.max(bb.max.y-bb.min.y,.001);model.scale.setScalar(targetHeight/h);orient.updateWorldMatrix(true,true);groundOrient(orient);root.userData.legs=[];root.userData.model=model;console.info('[trial] load',file,'euler',orient.rotation.toArray(),'worldH',targetHeight,'scale',model.scale.x); }
+async function loadCharacter(root:T.Group,file:string,targetHeight:number){ const {scene:model}=await gltfLoader.loadAsync(assetUrl(`models/${file}.glb`)); model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m&&'envMapIntensity' in m){(m as T.MeshStandardMaterial).envMapIntensity=1.15;(m as T.MeshStandardMaterial).needsUpdate=true;}}}); let rootBone:T.Object3D|undefined;model.traverse(o=>{if(!rootBone&&/(^|::)Root$/i.test(o.name||''))rootBone=o;});if(rootBone&&rootBone.position.y<0){console.info('[trial] zero Root local translation',{file,oldY:rootBone.position.y});rootBone.position.y=0;} const orient=root.userData.orient as T.Group; orient.clear(); orient.rotation.set(0,-Math.PI/2,0); model.scale.setScalar(1);model.position.set(0,0,0);model.rotation.set(0,0,0);orient.add(model);if(file==='player'){let straightened=0;model.traverse(o=>{if(/tripo0_.*Limb/i.test(o.name||'')){o.rotation.set(0,0,0);o.quaternion.identity();straightened++;}});console.info('[trial] straightened leg bones',straightened);}orient.updateWorldMatrix(true,true);const bb=new T.Box3().setFromObject(orient);const h=Math.max(bb.max.y-bb.min.y,.001);model.scale.setScalar(targetHeight/h);orient.updateWorldMatrix(true,true);groundOrient(orient,file==='boss'?'boss':'player');root.userData.legs=[];root.userData.model=model;console.info('[trial] load',file,'euler',orient.rotation.toArray(),'worldH',targetHeight,'scale',model.scale.x); }
 
 manager.onError=(url)=>{el('description').textContent=`美术资源加载失败，请刷新重试：${url}`;};
 async function loadLoco(){ mixerActive=false; console.info('[trial] loadLoco no-op: skipping bad player-loco.glb bind pose; using upright player.glb'); return; }
