@@ -73,53 +73,18 @@ function warrior(_enemy=false,boss=false){
  g.userData={legs:[] as T.Object3D[],pivot,torso,visual,orient,baseYaw:0,movePose:0};
  scene.add(g);return g;
 }
-function groundOrient(orient:T.Group){ orient.updateWorldMatrix(true,true); const box=new T.Box3().setFromObject(orient); orient.position.y-=box.min.y; console.info('[trial] groundOrient', {minY:box.min.y, positionY:orient.position.y}); }
+function groundOrient(orient:T.Group){ orient.updateWorldMatrix(true,true); const box=new T.Box3().setFromObject(orient); const cx=(box.min.x+box.max.x)*.5,cz=(box.min.z+box.max.z)*.5; let minY=box.max.y; orient.traverse(o=>{if(!(o instanceof T.Mesh)||!o.geometry)return;const pos=o.geometry.attributes.position;if(!pos)return;const v=new T.Vector3();for(let i=0;i<pos.count;i+=Math.max(1,Math.floor(pos.count/800))){v.fromBufferAttribute(pos,i).applyMatrix4(o.matrixWorld);if((v.x-cx)**2+(v.z-cz)**2<.55**2)minY=Math.min(minY,v.y);}});if(!Number.isFinite(minY))minY=box.min.y;orient.position.y-=minY;console.info('[trial] groundOrient feet',{minY,positionY:orient.position.y,boxMinY:box.min.y}); }
+
 const player=warrior();player.position.set(0,0,12);
 type Enemy={mesh:T.Group,hp:number,max:number,boss:boolean,home:T.Vector3,cool:number,wind:number,fireT:number,hit:boolean,dead:boolean,label:HTMLDivElement,pattern:number};
 const enemies:Enemy[]=[];for(const [x,z,boss] of [[0,-7,1]]){const mesh=warrior(true,!!boss);mesh.position.set(x,0,z);const label=document.createElement('div');label.className='enemy-label'+(boss?' boss-label':'');label.innerHTML=`${boss?'镇山巨兽':'石魇'}<i></i>`;document.body.append(label);enemies.push({mesh,hp:boss?380:80,max:boss?380:80,boss:!!boss,home:mesh.position.clone(),cool:1+rand(),wind:0,fireT:0,hit:false,dead:false,label,pattern:0});}
 const gltfLoader=new GLTFLoader(manager);
 let playerMixer:T.AnimationMixer|undefined; let locoActions:{idle?:T.AnimationAction,walk?:T.AnimationAction}={}; let mixerActive=false; let hitstop=0;
 const MOVE_NAMES=['横扫破风','挑棍穿云','旋砸定山'];
-async function loadCharacter(root:T.Group,file:string,targetHeight:number){
- const {scene:model}=await gltfLoader.loadAsync(assetUrl(`models/${file}.glb`));
- model.traverse(o=>{
-  if(o instanceof T.Mesh){
-   o.castShadow=true;o.receiveShadow=true;
-   const mats=Array.isArray(o.material)?o.material:[o.material];
-   for(const m of mats){
-    if(m && 'envMapIntensity' in m){(m as T.MeshStandardMaterial).envMapIntensity=1.15;(m as T.MeshStandardMaterial).needsUpdate=true;}
-   }
-  }
- });
- const box=new T.Box3().setFromObject(model);
- const size=box.getSize(new T.Vector3());
- const height=Math.max(size.y,0.001);
- const scale=targetHeight/height;
- model.scale.setScalar(scale);
- box.setFromObject(model);
- model.position.y-=box.min.y;
- // AABB inspection confirms the Tripo rest pose faces -X; rotate it to gameplay +Z.
- const NOSE_YAW_OFFSET=-Math.PI/2;
- model.rotation.y=0;
- const visual=root.userData.visual as T.Group; const orient=root.userData.orient as T.Group;
- const candidates=[[0,-Math.PI/2,0],[-Math.PI/2,-Math.PI/2,0],[Math.PI/2,-Math.PI/2,0]]; let best=candidates[0],bestHeight=-Infinity;
- for(const r of candidates){orient.rotation.set(...r as [number,number,number]); orient.add(model); orient.updateWorldMatrix(true,true); const bb=new T.Box3().setFromObject(orient); const h=bb.max.y-bb.min.y; if(h>bestHeight){bestHeight=h;best=r;} orient.remove(model);}
- orient.rotation.set(...best as [number,number,number]); orient.add(model);
- const legL=model.getObjectByName('Leg_L')||new T.Object3D();
- const legR=model.getObjectByName('Leg_R')||new T.Object3D();
- const weapon=model.getObjectByName('Weapon')||root.userData.pivot;
- const torso=model.getObjectByName('Torso')||root.userData.torso;
- root.userData.legs=[legL,legR];
- root.userData.pivot=weapon;
- root.userData.torso=torso;
- root.userData.model=model;
- groundOrient(orient);
- console.info('[trial] TripoOrient chosen Euler', orient.rotation.toArray(), 'height', bestHeight);
- // Safety lift keeps the restored upright mesh clear of the courtyard floor.
- if (orient.position.y < 0.08) orient.position.y += 0.08;
-}
+async function loadCharacter(root:T.Group,file:string,targetHeight:number){ const {scene:model}=await gltfLoader.loadAsync(assetUrl(`models/${file}.glb`)); model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m&&'envMapIntensity' in m){(m as T.MeshStandardMaterial).envMapIntensity=1.15;(m as T.MeshStandardMaterial).needsUpdate=true;}}}); const orient=root.userData.orient as T.Group; orient.clear(); orient.rotation.set(0,-Math.PI/2,0); model.scale.setScalar(1);model.position.set(0,0,0);model.rotation.set(0,0,0);orient.add(model);orient.updateWorldMatrix(true,true);const bb=new T.Box3().setFromObject(orient);const h=Math.max(bb.max.y-bb.min.y,.001);model.scale.setScalar(targetHeight/h);groundOrient(orient);root.userData.legs=[];root.userData.model=model;console.info('[trial] load',file,'euler',orient.rotation.toArray(),'worldH',targetHeight,'scale',model.scale.x); }
+
 manager.onError=(url)=>{el('description').textContent=`美术资源加载失败，请刷新重试：${url}`;};
-function attachStaff(root:T.Group){ const visual=root.userData.visual as T.Group; const parent=(visual.getObjectByName('WeaponPivot') as T.Group)||new T.Group(); parent.name='WeaponPivot'; if(!parent.parent) visual.add(parent); const builtIn=root.userData.model?.getObjectByName('Weapon') as T.Object3D|undefined; if(builtIn) builtIn.visible=false; const g=new T.Group(); g.name='DinghaiStaff'; cyl(.055,.07,2.5,black,0,0,0,g,12); cyl(.11,.04,.22,gold,0,1.28,0,g,10); g.position.set(.45,1.1,.15); parent.add(g); console.info('[trial] staff parent',parent.name,'local position',g.position.toArray()); }
+function attachStaff(root:T.Group){ const visual=root.userData.visual as T.Group; const parent=(visual.getObjectByName('WeaponPivot') as T.Group)||new T.Group(); parent.name='WeaponPivot'; if(!parent.parent) visual.add(parent); root.userData.model?.traverse((o:T.Object3D)=>{if(/weapon|staff|stick|棍|棒/i.test(o.name))o.visible=false;}); const g=new T.Group(); g.name='DinghaiStaff'; cyl(.055,.07,2.5,black,0,0,0,g,12); cyl(.11,.04,.22,gold,0,1.28,0,g,10); g.position.set(.42,.95,.2); parent.add(g); console.info('[trial] staff parent',parent.name,'local position',g.position.toArray()); }
 async function loadLoco(){ mixerActive=false; console.info('[trial] loadLoco no-op: skipping bad player-loco.glb bind pose; using upright player.glb'); return; }
 Promise.all([loadCharacter(player,'player',1.9),loadCharacter(enemies[0].mesh,'boss',4.2)]).then(async()=>{ await loadLoco(); attachStaff(player);
  artReady=true;startButton.disabled=false;startButton.textContent='踏 入 山 门　→';
@@ -194,10 +159,10 @@ function update(dt:number){if(hitstop>0){hitstop-=dt;dt=0;} time+=dt; if(playerM
 const moving=velocity.lengthSq()>0&&attackT<=0&&dodgeT<=0;
 player.userData.movePose=T.MathUtils.damp(player.userData.movePose,moving?1:0,10,dt);
 if(mixerActive){ const w=moving?1:0; locoActions.walk?.setEffectiveWeight(w); locoActions.idle?.setEffectiveWeight(1-w); }
-const bob=mixerActive?0:Math.sin(time*11)*player.userData.movePose;
+const bob=0;
 (player.userData.visual as T.Group).position.y=bob*.06+(dodgeT>0?0.18:0);
 (player.userData.visual as T.Group).rotation.z=dodgeT>0?-0.35:(mixerActive?0:Math.sin(time*11)*.04*player.userData.movePose);
-(player.userData.visual as T.Group).rotation.x=mixerActive?0:(moving?-0.08:0);
+(player.userData.visual as T.Group).rotation.x=0;
 if(!mixerActive) player.userData.legs.forEach((leg:T.Object3D,i:number)=>{leg.rotation.x=Math.sin(time*12+i*Math.PI)*.55*player.userData.movePose;});
 player.userData.torso.rotation.z=dodgeT>0?-0.2:0;
 if(ultT>0){
