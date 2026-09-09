@@ -96,9 +96,10 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  model.scale.setScalar(scale);
  box.setFromObject(model);
  model.position.y-=box.min.y;
- // Tripo characters use +Z as their forward axis. Keep the gameplay root's
- // yaw convention consistent with locomotion (sin(yaw), cos(yaw)).
- model.rotation.y=0;
+ // Gameplay roots use the existing atan2 yaw convention; Tripo meshes face ±X,
+ // so rotate the loaded visual to align its nose with gameplay forward.
+ const NOSE_YAW_OFFSET=Math.PI/2;
+ model.rotation.y=NOSE_YAW_OFFSET;
  const visual=root.userData.visual as T.Group;
  visual.add(model);
  const legL=model.getObjectByName('Leg_L')||new T.Object3D();
@@ -114,7 +115,8 @@ manager.onError=(url)=>{el('description').textContent=`美术资源加载失败�
 Promise.all([loadCharacter(player,'player',1.9),loadCharacter(enemies[0].mesh,'boss',4.2)]).then(()=>{
  artReady=true;startButton.disabled=false;startButton.textContent='踏 入 山 门　→';
 }).catch((err)=>{ console.error(err); artReady=true; startButton.disabled=false; startButton.textContent='踏 入 山 门　→'; showError(err); });
-const keys=new Set<string>();let touchMoveX=0,touchMoveY=0;let running=false,started=false,ended=false,paused=false,hp=100,stamina=100,yaw=0,pitch=.35,vy=0,grounded=true,attackT=0,combo=0,queued=false,lastAttack=-10,dodgeT=0,invulnerable=0,kills=0,time=0,hurt=0,noticeT=0,ultT=0,ultCd=0,ultHit=false;const hitSet=new Set<Enemy>();const velocity=new T.Vector3();player.rotation.y=0;let shake=0;let muted=false,audioCtx:AudioContext|undefined;
+const keys=new Set<string>();let touchMoveX=0,touchMoveY=0;let running=false,started=false,ended=false,paused=false,hp=100,stamina=100,yaw=0,pitch=.35,vy=0,grounded=true,attackT=0,combo=0,queued=false,lastAttack=-10,dodgeT=0,invulnerable=0,kills=0,time=0,hurt=0,noticeT=0,ultT=0,ultCd=0,ultHit=false;const hitSet=new Set<Enemy>();const velocity=new T.Vector3();// Gameplay roots use atan2 velocity; visual models apply the shared Tripo nose offset.
+player.rotation.y=0;let shake=0;let muted=false,audioCtx:AudioContext|undefined;
 function sound(freq:number,duration=.12,type:OscillatorType='sine',volume=.055){if(muted)return;try{audioCtx??=new AudioContext();const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();osc.type=type;osc.frequency.setValueAtTime(freq,audioCtx.currentTime);osc.frequency.exponentialRampToValueAtTime(Math.max(25,freq*.35),audioCtx.currentTime+duration);gain.gain.setValueAtTime(volume,audioCtx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+duration);osc.connect(gain).connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime+duration);}catch{}}
 function notice(text:string){if(el('notice')) el('notice')!.textContent=text;noticeT=2;}
 function startAttack(){if(!running||dodgeT>0||ultT>0)return;if(attackT>0){queued=true;return;}combo=time-lastAttack<.85?(combo+1)%3:0;attackT=combo===2?.62:.48;lastAttack=time;hitSet.clear();sound(210+combo*90,.16+(combo*.04),'triangle',.06+combo*.01);notice(`行者 · ${MOVE_NAMES[combo]}`);staffSlashTrail(player.position,player.rotation.y,combo);}
