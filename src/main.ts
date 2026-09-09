@@ -102,7 +102,9 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  const NOSE_YAW_OFFSET=-Math.PI/2;
  model.rotation.y=0;
  const visual=root.userData.visual as T.Group; const orient=root.userData.orient as T.Group;
- orient.add(model);
+ const candidates=[[0,-Math.PI/2,0],[-Math.PI/2,-Math.PI/2,0],[Math.PI/2,-Math.PI/2,0]]; let best=candidates[0],bestHeight=-Infinity;
+ for(const r of candidates){orient.rotation.set(...r as [number,number,number]); orient.add(model); orient.updateWorldMatrix(true,true); const bb=new T.Box3().setFromObject(orient); const h=bb.max.y-bb.min.y; if(h>bestHeight){bestHeight=h;best=r;} orient.remove(model);}
+ orient.rotation.set(...best as [number,number,number]); orient.add(model);
  const legL=model.getObjectByName('Leg_L')||new T.Object3D();
  const legR=model.getObjectByName('Leg_R')||new T.Object3D();
  const weapon=model.getObjectByName('Weapon')||root.userData.pivot;
@@ -112,11 +114,12 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  root.userData.torso=torso;
  root.userData.model=model;
  groundOrient(orient);
+ console.info('[trial] TripoOrient chosen Euler', orient.rotation.toArray(), 'height', bestHeight);
  // Safety lift keeps the restored upright mesh clear of the courtyard floor.
  if (orient.position.y < 0.08) orient.position.y += 0.08;
 }
 manager.onError=(url)=>{el('description').textContent=`美术资源加载失败，请刷新重试：${url}`;};
-function attachStaff(root:T.Group){ const visual=root.userData.visual as T.Group; const parent=(visual.getObjectByName('WeaponPivot') as T.Group)||new T.Group(); parent.name='WeaponPivot'; if(!parent.parent) visual.add(parent); const g=new T.Group(); g.name='DinghaiStaff'; cyl(.055,.07,2.5,black,0,0,0,g,12); cyl(.11,.04,.22,gold,0,1.28,0,g,10); g.position.set(.45,1.1,.15); parent.add(g); console.info('[trial] staff parent',parent.name,'local position',g.position.toArray()); }
+function attachStaff(root:T.Group){ const visual=root.userData.visual as T.Group; const parent=(visual.getObjectByName('WeaponPivot') as T.Group)||new T.Group(); parent.name='WeaponPivot'; if(!parent.parent) visual.add(parent); const builtIn=root.userData.model?.getObjectByName('Weapon') as T.Object3D|undefined; if(builtIn) builtIn.visible=false; const g=new T.Group(); g.name='DinghaiStaff'; cyl(.055,.07,2.5,black,0,0,0,g,12); cyl(.11,.04,.22,gold,0,1.28,0,g,10); g.position.set(.45,1.1,.15); parent.add(g); console.info('[trial] staff parent',parent.name,'local position',g.position.toArray()); }
 async function loadLoco(){ mixerActive=false; console.info('[trial] loadLoco no-op: skipping bad player-loco.glb bind pose; using upright player.glb'); return; }
 Promise.all([loadCharacter(player,'player',1.9),loadCharacter(enemies[0].mesh,'boss',4.2)]).then(async()=>{ await loadLoco(); attachStaff(player);
  artReady=true;startButton.disabled=false;startButton.textContent='踏 入 山 门　→';
