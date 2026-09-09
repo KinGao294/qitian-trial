@@ -1,0 +1,10 @@
+已完成可玩的原创 3D 游戏「齐天试炼」。
+
+- 入口：[index.html](/workspace/wukong-3d/index.html)、[src/main.ts](/workspace/wukong-3d/src/main.ts)
+- 说明：[中文 README](/workspace/wukong-3d/README.md)
+- 运行：`cd /workspace/wukong-3d && npm install && npm run dev`
+- 操作：WASD 移动、鼠标视角、空格跳跃、左键/J 连击、Shift 闪避。
+
+**战斗已实测可用**：真实键盘操作击败全部 7 名敌人并通关；跳跃落地、重开、敌人扣血检查通过。`npm run build` 成功。
+
+开发服务器已运行：http://localhost:5173
