@@ -73,7 +73,16 @@ function warrior(_enemy=false,boss=false){
  g.userData={legs:[] as T.Object3D[],pivot,torso,visual,orient,baseYaw:0,movePose:0};
  scene.add(g);return g;
 }
-function groundOrient(orient:T.Group){ orient.updateWorldMatrix(true,true); const box=new T.Box3().setFromObject(orient); const cx=(box.min.x+box.max.x)*.5,cz=(box.min.z+box.max.z)*.5; let minY=box.max.y; orient.traverse(o=>{if(!(o instanceof T.Mesh)||!o.geometry)return;const pos=o.geometry.attributes.position;if(!pos)return;const v=new T.Vector3();for(let i=0;i<pos.count;i+=Math.max(1,Math.floor(pos.count/800))){v.fromBufferAttribute(pos,i).applyMatrix4(o.matrixWorld);if((v.x-cx)**2+(v.z-cz)**2<.55**2)minY=Math.min(minY,v.y);}});if(!Number.isFinite(minY))minY=box.min.y;orient.position.y-=minY;console.info('[trial] groundOrient feet',{minY,positionY:orient.position.y,boxMinY:box.min.y}); }
+function groundOrient(orient:T.Group){
+ orient.updateWorldMatrix(true,true);
+ const box=new T.Box3().setFromObject(orient);
+ const cx=(box.min.x+box.max.x)*.5,cz=(box.min.z+box.max.z)*.5;
+ let minY=Infinity,hits=0;
+ orient.traverse(o=>{if(!(o instanceof T.Mesh)||!o.geometry)return;const pos=o.geometry.attributes.position;if(!pos)return;const v=new T.Vector3();for(let i=0;i<pos.count;i+=Math.max(1,Math.floor(pos.count/800))){v.fromBufferAttribute(pos,i).applyMatrix4(o.matrixWorld);if((v.x-cx)**2+(v.z-cz)**2<.8**2){minY=Math.min(minY,v.y);hits++;}}});
+ if(hits===0||!Number.isFinite(minY))minY=box.min.y;
+ orient.position.y-=minY; orient.position.y+=.02;
+ console.info('[trial] groundOrient feet',{hits,minY,positionY:orient.position.y,boxMinY:box.min.y,boxMaxY:box.max.y});
+}
 
 const player=warrior();player.position.set(0,0,12);
 type Enemy={mesh:T.Group,hp:number,max:number,boss:boolean,home:T.Vector3,cool:number,wind:number,fireT:number,hit:boolean,dead:boolean,label:HTMLDivElement,pattern:number};
@@ -81,7 +90,7 @@ const enemies:Enemy[]=[];for(const [x,z,boss] of [[0,-7,1]]){const mesh=warrior(
 const gltfLoader=new GLTFLoader(manager);
 let playerMixer:T.AnimationMixer|undefined; let locoActions:{idle?:T.AnimationAction,walk?:T.AnimationAction}={}; let mixerActive=false; let hitstop=0;
 const MOVE_NAMES=['横扫破风','挑棍穿云','旋砸定山'];
-async function loadCharacter(root:T.Group,file:string,targetHeight:number){ const {scene:model}=await gltfLoader.loadAsync(assetUrl(`models/${file}.glb`)); model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m&&'envMapIntensity' in m){(m as T.MeshStandardMaterial).envMapIntensity=1.15;(m as T.MeshStandardMaterial).needsUpdate=true;}}}); const orient=root.userData.orient as T.Group; orient.clear(); orient.rotation.set(0,-Math.PI/2,0); model.scale.setScalar(1);model.position.set(0,0,0);model.rotation.set(0,0,0);orient.add(model);orient.updateWorldMatrix(true,true);const bb=new T.Box3().setFromObject(orient);const h=Math.max(bb.max.y-bb.min.y,.001);model.scale.setScalar(targetHeight/h);groundOrient(orient);root.userData.legs=[];root.userData.model=model;console.info('[trial] load',file,'euler',orient.rotation.toArray(),'worldH',targetHeight,'scale',model.scale.x); }
+async function loadCharacter(root:T.Group,file:string,targetHeight:number){ const {scene:model}=await gltfLoader.loadAsync(assetUrl(`models/${file}.glb`)); model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m&&'envMapIntensity' in m){(m as T.MeshStandardMaterial).envMapIntensity=1.15;(m as T.MeshStandardMaterial).needsUpdate=true;}}}); const orient=root.userData.orient as T.Group; orient.clear(); orient.rotation.set(0,-Math.PI/2,0); model.scale.setScalar(1);model.position.set(0,0,0);model.rotation.set(0,0,0);orient.add(model);orient.updateWorldMatrix(true,true);const bb=new T.Box3().setFromObject(orient);const h=Math.max(bb.max.y-bb.min.y,.001);model.scale.setScalar(targetHeight/h);orient.updateWorldMatrix(true,true);groundOrient(orient);root.userData.legs=[];root.userData.model=model;console.info('[trial] load',file,'euler',orient.rotation.toArray(),'worldH',targetHeight,'scale',model.scale.x); }
 
 manager.onError=(url)=>{el('description').textContent=`美术资源加载失败，请刷新重试：${url}`;};
 function attachStaff(root:T.Group){ const visual=root.userData.visual as T.Group; const parent=(visual.getObjectByName('WeaponPivot') as T.Group)||new T.Group(); parent.name='WeaponPivot'; if(!parent.parent) visual.add(parent); root.userData.model?.traverse((o:T.Object3D)=>{if(/weapon|staff|stick|棍|棒/i.test(o.name))o.visible=false;}); const g=new T.Group(); g.name='DinghaiStaff'; cyl(.055,.07,2.5,black,0,0,0,g,12); cyl(.11,.04,.22,gold,0,1.28,0,g,10); g.position.set(.42,.95,.2); parent.add(g); console.info('[trial] staff parent',parent.name,'local position',g.position.toArray()); }
