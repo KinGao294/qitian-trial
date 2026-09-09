@@ -3,7 +3,7 @@ import './style.css';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
-app.innerHTML = `<div id="hud"><div class="top"><div class="brand">齐天试炼<small>THE PILGRIM · TRIAL OF EMBERS</small></div><div class="chapter">第一章 · 苍岚古寺<strong>山门余烬</strong><div class="line"></div><div style="margin-top:12px;font-size:10px">踏破迷障 · 棍定山河</div></div></div><div class="reticle"></div><div class="notice" id="notice"></div><div class="status"><label>行 者 <span id="hpText">100 / 100</span></label><div class="bar"><i id="hp"></i></div><div class="bar stamina"><i id="stamina"></i></div></div><div class="objective">击败镇庭石狮<br><span id="count">0</span> / 1<div style="color:#989f90;font-size:10px">红环蓄力 · 闪避反击</div></div><div class="controls"><span><b>W A S D</b>移动</span><span><b>鼠标</b>视角</span><span><b>J / 左键</b>棍术</span><span><b>空格</b>跳跃</span><span class="optional"><b>SHIFT</b>闪避</span><span class="optional"><b>ESC</b>暂停</span><button class="sound" id="sound">声音 · 开</button></div></div><div id="hurt"></div><div class="overlay" id="overlay"><div class="panel"><div class="eyebrow">AN ORIGINAL 3D ACTION EXPERIENCE</div><h1 id="title">齐天试炼</h1><div class="subtitle" id="subtitle">山 门 余 烬 <span class="seal">壹</span></div><p id="description">暮钟已寂，山寺犹燃。<br>执一根长棍，穿过苍岚与残垣。<br>挑战镇庭石狮，破除古寺封印。</p><button class="button" id="start">踏 入 山 门　→</button><div class="fine">WASD 移动 · 鼠标转向 · 连按 J 三段棍术 · Shift 闪避<br><br>Image 生成贴图 + Blender 原创模型 / 建议使用键盘与鼠标</div></div></div>`;
+app.innerHTML = `<div id="hud"><div class="top"><div class="brand">齐天试炼<small>THE PILGRIM · TRIAL OF EMBERS</small></div><div class="chapter">第一章 · 苍岚古寺<strong>山门余烬</strong><div class="line"></div><div style="margin-top:12px;font-size:10px">踏破迷障 · 棍定山河</div></div></div><div class="reticle"></div><div class="notice" id="notice"></div><div class="status"><label>行 者 <span id="hpText">100 / 100</span></label><div class="bar"><i id="hp"></i></div><div class="bar stamina"><i id="stamina"></i></div></div><div class="objective">击败镇山巨兽<br><span id="count">0</span> / 1<div style="color:#989f90;font-size:10px">红环踏地 / 橙锥喷火 · 闪避反击</div></div><div class="controls"><span><b>W A S D</b>移动</span><span><b>鼠标</b>视角</span><span><b>J / 左键</b>三段棍术</span><span><b>K</b>定海大招</span><span><b>空格</b>跳跃</span><span class="optional"><b>SHIFT</b>闪避</span><span class="optional"><b>ESC</b>暂停</span><button class="sound" id="sound">声音 · 开</button></div></div><div id="hurt"></div><div class="overlay" id="overlay"><div class="panel"><div class="eyebrow">AN ORIGINAL 3D ACTION EXPERIENCE</div><h1 id="title">齐天试炼</h1><div class="subtitle" id="subtitle">山 门 余 烬 <span class="seal">壹</span></div><p id="description">暮钟已寂，山寺犹燃。<br>执一根长棍，穿过苍岚与残垣。<br>挑战镇山巨兽，破除古寺封印。</p><button class="button" id="start">踏 入 山 门　→</button><div class="fine">WASD 移动 · 鼠标转向 · 连按 J：横扫破风 → 挑棍穿云 → 旋砸定山 · K 定海金光 · 巨兽会喷火 · Shift 闪避<br><br>Tripo 写实模型 + 原创场景 / 建议使用键盘与鼠标</div></div></div>`;
 const el = (id:string) => document.getElementById(id)!;
 const scene = new T.Scene(); scene.background = new T.Color('#696e70'); scene.fog = new T.FogExp2('#696e70', .013);
 const renderer = new T.WebGLRenderer({antialias:true}); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,1.7)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=T.PCFSoftShadowMap; renderer.toneMapping=T.ACESFilmicToneMapping; renderer.toneMappingExposure=1.12; app.prepend(renderer.domElement);
@@ -54,56 +54,242 @@ for(let i=0;i<40;i++){const side=i%2?1:-1;const x=side*(19+rand()*2),z=-21+rand(
 for(const x of [-20,20])for(const z of [-15,10]){const trunk=cyl(.23,.55,7,wood,x,3.2,z);trunk.rotation.z=x>0?-.12:.12;for(let j=0;j<5;j++){const branch=cyl(.04,.17,3.4,wood,x+(j%2?1:-1),4+j*.48,z);branch.rotation.z=(j%2?1:-1)*.85;branch.rotation.x=j*.7;}}
 const motes=new T.BufferGeometry();const motePos=new Float32Array(180*3);for(let i=0;i<motePos.length;i+=3){motePos[i]=(rand()-.5)*46;motePos[i+1]=rand()*9;motePos[i+2]=(rand()-.5)*46;}motes.setAttribute('position',new T.BufferAttribute(motePos,3));scene.add(new T.Points(motes,new T.PointsMaterial({color:'#e3cf8c',size:.045,transparent:true,opacity:.65})));
 
-// Keep gameplay roots stable; GLB children provide all character visuals.
+// Keep gameplay roots stable; Tripo GLB provides visuals. Missing bone names get safe pivots.
 function warrior(_enemy=false,boss=false){
  const g=new T.Group(); g.name=boss?'Boss':'Player';
- g.userData={legs:[],pivot:new T.Group(),torso:new T.Group()};
- if(boss)g.scale.setScalar(1.3);scene.add(g);return g;
+ const visual=new T.Group(); visual.name='Visual'; g.add(visual);
+ const pivot=new T.Group(); pivot.name='WeaponPivot'; visual.add(pivot);
+ const torso=new T.Group(); torso.name='TorsoPivot'; visual.add(torso);
+ g.userData={legs:[] as T.Object3D[],pivot,torso,visual,baseYaw:0,movePose:0};
+ scene.add(g);return g;
 }
 const player=warrior();player.position.set(0,0,12);
-type Enemy={mesh:T.Group,hp:number,max:number,boss:boolean,home:T.Vector3,cool:number,wind:number,hit:boolean,dead:boolean,label:HTMLDivElement};
-const enemies:Enemy[]=[];for(const [x,z,boss] of [[0,-7,1]]){const mesh=warrior(true,!!boss);mesh.position.set(x,0,z);const label=document.createElement('div');label.className='enemy-label'+(boss?' boss-label':'');label.innerHTML=`${boss?'镇庭石狮':'石魇'}<i></i>`;document.body.append(label);enemies.push({mesh,hp:boss?240:80,max:boss?240:80,boss:!!boss,home:mesh.position.clone(),cool:1+rand(),wind:0,hit:false,dead:false,label});}
+type Enemy={mesh:T.Group,hp:number,max:number,boss:boolean,home:T.Vector3,cool:number,wind:number,fireT:number,hit:boolean,dead:boolean,label:HTMLDivElement,pattern:number};
+const enemies:Enemy[]=[];for(const [x,z,boss] of [[0,-7,1]]){const mesh=warrior(true,!!boss);mesh.position.set(x,0,z);const label=document.createElement('div');label.className='enemy-label'+(boss?' boss-label':'');label.innerHTML=`${boss?'镇山巨兽':'石魇'}<i></i>`;document.body.append(label);enemies.push({mesh,hp:boss?380:80,max:boss?380:80,boss:!!boss,home:mesh.position.clone(),cool:1+rand(),wind:0,fireT:0,hit:false,dead:false,label,pattern:0});}
 const gltfLoader=new GLTFLoader(manager);
-async function loadCharacter(root:T.Group,file:string){
+const MOVE_NAMES=['横扫破风','挑棍穿云','旋砸定山'];
+async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  const {scene:model}=await gltfLoader.loadAsync(assetUrl(`models/${file}.glb`));
- model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;}});
- root.add(model);
- root.userData={legs:[model.getObjectByName('Leg_L')!,model.getObjectByName('Leg_R')!],pivot:model.getObjectByName('Weapon')!,torso:model.getObjectByName('Torso')!};
+ model.traverse(o=>{
+  if(o instanceof T.Mesh){
+   o.castShadow=true;o.receiveShadow=true;
+   const mats=Array.isArray(o.material)?o.material:[o.material];
+   for(const m of mats){
+    if(m && 'envMapIntensity' in m){(m as T.MeshStandardMaterial).envMapIntensity=1.15;(m as T.MeshStandardMaterial).needsUpdate=true;}
+   }
+  }
+ });
+ const box=new T.Box3().setFromObject(model);
+ const size=box.getSize(new T.Vector3());
+ const height=Math.max(size.y,0.001);
+ const scale=targetHeight/height;
+ model.scale.setScalar(scale);
+ box.setFromObject(model);
+ model.position.y-=box.min.y;
+ // Face +Z gameplay forward after root yaw.
+ model.rotation.y=file==='player'?Math.PI:0;
+ const visual=root.userData.visual as T.Group;
+ visual.add(model);
+ const legL=model.getObjectByName('Leg_L')||new T.Object3D();
+ const legR=model.getObjectByName('Leg_R')||new T.Object3D();
+ const weapon=model.getObjectByName('Weapon')||root.userData.pivot;
+ const torso=model.getObjectByName('Torso')||root.userData.torso;
+ root.userData.legs=[legL,legR];
+ root.userData.pivot=weapon;
+ root.userData.torso=torso;
+ root.userData.model=model;
 }
 manager.onError=(url)=>{el('description').textContent=`美术资源加载失败，请刷新重试：${url}`;};
-Promise.all([loadCharacter(player,'player'),loadCharacter(enemies[0].mesh,'boss')]).then(()=>{
+Promise.all([loadCharacter(player,'player',1.9),loadCharacter(enemies[0].mesh,'boss',4.2)]).then(()=>{
  artReady=true;startButton.disabled=false;startButton.textContent='踏 入 山 门　→';
-}).catch(()=>{startButton.textContent='模型载入失败 · 请刷新';});
-const keys=new Set<string>();let running=false,started=false,ended=false,paused=false,hp=100,stamina=100,yaw=0,pitch=.35,vy=0,grounded=true,attackT=0,combo=0,queued=false,lastAttack=-10,dodgeT=0,invulnerable=0,kills=0,time=0,hurt=0,noticeT=0;const hitSet=new Set<Enemy>();const velocity=new T.Vector3();player.rotation.y=Math.PI;let muted=false,audioCtx:AudioContext|undefined;
+}).catch((err)=>{console.error(err);startButton.textContent='模型载入失败 · 请刷新';});
+const keys=new Set<string>();let running=false,started=false,ended=false,paused=false,hp=100,stamina=100,yaw=0,pitch=.35,vy=0,grounded=true,attackT=0,combo=0,queued=false,lastAttack=-10,dodgeT=0,invulnerable=0,kills=0,time=0,hurt=0,noticeT=0,ultT=0,ultCd=0,ultHit=false;const hitSet=new Set<Enemy>();const velocity=new T.Vector3();player.rotation.y=Math.PI;let muted=false,audioCtx:AudioContext|undefined;
 function sound(freq:number,duration=.12,type:OscillatorType='sine',volume=.055){if(muted)return;try{audioCtx??=new AudioContext();const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();osc.type=type;osc.frequency.setValueAtTime(freq,audioCtx.currentTime);osc.frequency.exponentialRampToValueAtTime(Math.max(25,freq*.35),audioCtx.currentTime+duration);gain.gain.setValueAtTime(volume,audioCtx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+duration);osc.connect(gain).connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime+duration);}catch{}}
 function notice(text:string){el('notice').textContent=text;noticeT=2;}
-function startAttack(){if(!running||dodgeT>0)return;if(attackT>0){queued=true;return;}combo=time-lastAttack<.85?(combo+1)%3:0;attackT=.48;lastAttack=time;hitSet.clear();sound(210+combo*80,.16,'triangle');}
-function dodge(){if(!running||stamina<30||dodgeT>0)return;stamina-=30;dodgeT=.38;invulnerable=.45;attackT=0;sound(140,.15,'sine');}
-window.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown'].includes(e.code))e.preventDefault();keys.add(e.code);if(e.repeat)return;if(e.code==='KeyJ')startAttack();if(e.code==='ShiftLeft'||e.code==='ShiftRight')dodge();if(e.code==='Space'&&grounded&&running){vy=8.4;grounded=false;sound(220,.1);}if(e.code==='Escape'&&started&&!ended){if(!paused)pause();}});window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{keys.clear();if(running)pause();});
+function startAttack(){if(!running||dodgeT>0||ultT>0)return;if(attackT>0){queued=true;return;}combo=time-lastAttack<.85?(combo+1)%3:0;attackT=combo===2?.62:.48;lastAttack=time;hitSet.clear();sound(210+combo*90,.16+(combo*.04),'triangle',.06+combo*.01);notice(`行者 · ${MOVE_NAMES[combo]}`);staffSlashTrail(player.position,player.rotation.y,combo);}
+function startUltimate(){
+ if(!running||dodgeT>0||ultT>0||ultCd>0||attackT>0)return;
+ if(stamina<45){notice('灵力不足 · 无法定海');return;}
+ stamina-=45;ultT=.95;ultCd=7.5;ultHit=false;attackT=0;queued=false;invulnerable=.35;
+ notice('行者 · 定海神针');sound(90,.35,'sawtooth',.07);sound(420,.4,'triangle',.05);
+ ring(player.position,'#ffe29a',2.6,.45);
+}
+function dodge(){if(!running||stamina<30||dodgeT>0||ultT>0)return;stamina-=30;dodgeT=.42;invulnerable=.5;attackT=0;sound(140,.15,'sine');notice('行者 · 纵身闪避');ring(player.position,'#9ad7ff',1.4,.28);}
+window.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown'].includes(e.code))e.preventDefault();keys.add(e.code);if(e.repeat)return;if(e.code==='KeyJ')startAttack();if(e.code==='KeyK')startUltimate();if(e.code==='ShiftLeft'||e.code==='ShiftRight')dodge();if(e.code==='Space'&&grounded&&running){vy=8.4;grounded=false;sound(220,.1);}if(e.code==='Escape'&&started&&!ended){if(!paused)pause();}});window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{keys.clear();if(running)pause();});
 renderer.domElement.addEventListener('mousedown',e=>{if(e.button===0&&running){if(document.pointerLockElement!==renderer.domElement)renderer.domElement.requestPointerLock();startAttack();}});window.addEventListener('mousemove',e=>{if(document.pointerLockElement===renderer.domElement&&running){yaw-=e.movementX*.0025;pitch=T.MathUtils.clamp(pitch+e.movementY*.002,.05,.85);}});document.addEventListener('pointerlockchange',()=>{if(!document.pointerLockElement&&running)pause();});
 el('sound').onclick=()=>{muted=!muted;el('sound').textContent=`声音 · ${muted?'关':'开'}`;};
 function pause(){paused=true;running=false;keys.clear();el('overlay').classList.remove('hidden');el('title').textContent='暂歇片刻';el('subtitle').textContent='山 风 未 止';el('description').innerHTML='旅途仍在继续。<br>调整呼吸，再赴试炼。';el('start').textContent='继 续 试 炼　→';if(document.pointerLockElement)document.exitPointerLock();}
-function reset(){hp=100;stamina=100;kills=0;vy=0;attackT=0;queued=false;combo=0;lastAttack=-10;dodgeT=0;invulnerable=0;grounded=true;hurt=0;keys.clear();player.position.set(0,0,12);player.rotation.set(0,Math.PI,0);yaw=0;pitch=.35;for(const e of enemies){e.hp=e.max;e.dead=false;e.mesh.visible=true;e.mesh.position.copy(e.home);e.mesh.rotation.set(0,0,0);e.cool=1.5;e.wind=0;}for(const d of drops)scene.remove(d);drops.length=0;ended=false;}
-el('start').onclick=()=>{if(!artReady)return;if(ended)reset();started=true;paused=false;running=true;el('overlay').classList.add('hidden');renderer.domElement.requestPointerLock();sound(330,.25);notice('苍岚古寺 · 挑战镇庭石狮');};
+function reset(){hp=100;stamina=100;kills=0;vy=0;attackT=0;queued=false;combo=0;lastAttack=-10;dodgeT=0;invulnerable=0;ultT=0;ultCd=0;ultHit=false;grounded=true;hurt=0;keys.clear();player.position.set(0,0,12);player.rotation.set(0,Math.PI,0);yaw=0;pitch=.35;for(const e of enemies){e.hp=e.max;e.dead=false;e.mesh.visible=true;e.mesh.position.copy(e.home);e.mesh.rotation.set(0,0,0);e.cool=1.5;e.wind=0;e.fireT=0;e.pattern=0;}for(const d of drops)scene.remove(d);drops.length=0;ended=false;}
+el('start').onclick=()=>{if(!artReady)return;if(ended)reset();started=true;paused=false;running=true;el('overlay').classList.add('hidden');renderer.domElement.requestPointerLock();sound(330,.25);notice('苍岚古寺 · 挑战镇山巨兽');};
 function finish(win:boolean){ended=true;running=false;el('title').textContent=win?'试炼已成':'再起一程';el('subtitle').textContent=win?'一 棍 破 迷 障':'胜 负 仍 未 定';el('description').innerHTML=win?'石狮封印已破，古寺重归寂静。<br>你的长棍，已留下新的传说。':`已击破 ${kills} / 1 名守卫。<br>敌人蓄力时会亮起红环，闪避可避开伤害。<br>击败守卫后拾取金色灵息，恢复生命。`;el('start').textContent='再 入 山 门　↻';el('overlay').classList.remove('hidden');document.exitPointerLock();}
-const effects:{mesh:T.Mesh,life:number,max:number}[]=[];const drops:T.Mesh[]=[];
-function ring(pos:T.Vector3,color:string,size:number,life:number){const mesh=new T.Mesh(new T.RingGeometry(size*.85,size,40),new T.MeshBasicMaterial({color,side:T.DoubleSide,transparent:true,opacity:.85,depthWrite:false}));mesh.rotation.x=-Math.PI/2;mesh.position.copy(pos);mesh.position.y+=.12;scene.add(mesh);effects.push({mesh,life,max:life});}
-function sparks(pos:T.Vector3){for(let i=0;i<7;i++){const mesh=sphere(.045, gold.clone(),pos.x+(rand()-.5),pos.y+.5+rand()*1.3,pos.z+(rand()-.5),scene);effects.push({mesh,life:.25+rand()*.2,max:.45});}}
+type Fx={mesh:T.Mesh,life:number,max:number,grow?:number,vy?:number,vx?:number,vz?:number};
+const effects:Fx[]=[];const drops:T.Mesh[]=[];
+function ring(pos:T.Vector3,color:string,size:number,life:number){const mesh=new T.Mesh(new T.RingGeometry(size*.85,size,40),new T.MeshBasicMaterial({color,side:T.DoubleSide,transparent:true,opacity:.85,depthWrite:false}));mesh.rotation.x=-Math.PI/2;mesh.position.copy(pos);mesh.position.y+=.12;scene.add(mesh);effects.push({mesh,life,max:life,grow:size*0.35});}
+function sparks(pos:T.Vector3,n=7,color='#ffe7a0'){for(let i=0;i<n;i++){const m=new T.MeshStandardMaterial({color,emissive:color,emissiveIntensity:2.2,roughness:0.4,metalness:0.2});const mesh=sphere(.05+rand()*.04,m,pos.x+(rand()-.5)*0.6,pos.y+.4+rand()*1.4,pos.z+(rand()-.5)*0.6,scene);effects.push({mesh,life:.28+rand()*.25,max:.5,vy:1.5+rand()*2,vx:(rand()-.5)*2,vz:(rand()-.5)*2});}}
+function beam(origin:T.Vector3,dir:T.Vector3,length:number,color:string,life=.35,radius=.08){
+ const geom=new T.CylinderGeometry(radius,radius*0.35,length,8,1,true);
+ const mat=new T.MeshBasicMaterial({color,transparent:true,opacity:.85,depthWrite:false,blending:T.AdditiveBlending});
+ const mesh=new T.Mesh(geom,mat);
+ const mid=origin.clone().add(dir.clone().multiplyScalar(length*0.5));
+ mesh.position.copy(mid);
+ mesh.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),dir.clone().normalize());
+ scene.add(mesh);effects.push({mesh,life,max:life});
+}
+function fireCone(origin:T.Vector3,yaw:number,life=.55){
+ const geom=new T.ConeGeometry(1.8,6.5,18,1,true);
+ const mat=new T.MeshBasicMaterial({color:'#ff6a2a',transparent:true,opacity:.72,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide});
+ const mesh=new T.Mesh(geom,mat);
+ const forward=new T.Vector3(Math.sin(yaw),0,Math.cos(yaw));
+ mesh.position.copy(origin).add(forward.clone().multiplyScalar(3.1)).add(new T.Vector3(0,1.6,0));
+ mesh.quaternion.setFromUnitVectors(new T.Vector3(0,-1,0),forward.clone().add(new T.Vector3(0,-0.15,0)).normalize());
+ scene.add(mesh);effects.push({mesh,life,max:life,grow:1.2});
+ for(let i=0;i<10;i++)sparks(mesh.position.clone().add(forward.clone().multiplyScalar(rand()*2)),1,'#ffb14a');
+}
+function staffSlashTrail(pos:T.Vector3,yaw:number,combo:number){
+ const facing=new T.Vector3(Math.sin(yaw),0,Math.cos(yaw));
+ const colors=['#ffe9a8','#ffd36a','#ffefc0'];
+ beam(pos.clone().add(new T.Vector3(0,1.15,0)),facing,2.4+combo*0.7,colors[combo]||'#ffe9a8',.28,.06+combo*.02);
+ if(combo>=1)beam(pos.clone().add(new T.Vector3(0,1.4,0)),facing.clone().applyAxisAngle(new T.Vector3(0,1,0),0.35),2.1,colors[combo],.22,.05);
+ if(combo===2){ring(pos,'#ffd27a',2.2,.3);sparks(pos,12,'#ffe7a0');}
+}
 function floorAt(x:number,z:number,y:number){let floor=0;for(const s of solids)if(Math.abs(x-s.x)<s.w/2+.15&&Math.abs(z-s.z)<s.d/2+.15&&y>=s.h-.1)floor=Math.max(floor,s.h);return floor;}
 function moveBody(obj:T.Object3D,dx:number,dz:number){for(const [ax,amount] of [['x',dx],['z',dz]] as const){obj.position[ax]=T.MathUtils.clamp(obj.position[ax]+amount,-21.8,21.8);for(const s of solids){if(obj.position.y>=s.h-.12)continue;if(Math.abs(obj.position.x-s.x)<s.w/2+.36&&Math.abs(obj.position.z-s.z)<s.d/2+.36){obj.position[ax]=s[ax]+Math.sign(obj.position[ax]-s[ax]||-amount)*(s[ax==='x'?'w':'d']/2+.36);}}}}
 const swing=new T.Mesh(new T.TorusGeometry(1.9,.045,5,45,Math.PI*1.3),new T.MeshBasicMaterial({color:'#ffe0a0',transparent:true,opacity:.7,depthWrite:false}));swing.rotation.x=Math.PI/2;scene.add(swing);
 const clock=new T.Clock();const look=new T.Vector3(),desired=new T.Vector3(),project=new T.Vector3();
-function update(dt:number){time+=dt;invulnerable=Math.max(0,invulnerable-dt);dodgeT=Math.max(0,dodgeT-dt);stamina=Math.min(100,stamina+dt*19);const forward=new T.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));const right=new T.Vector3(Math.cos(yaw),0,-Math.sin(yaw));velocity.set(0,0,0);if(keys.has('KeyW'))velocity.add(forward);if(keys.has('KeyS'))velocity.sub(forward);if(keys.has('KeyD'))velocity.add(right);if(keys.has('KeyA'))velocity.sub(right);velocity.normalize();if(velocity.lengthSq()>0&&attackT<=0)player.rotation.y=Math.atan2(velocity.x,velocity.z);if(dodgeT>0){velocity.set(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));}const speed=dodgeT>0?13:attackT>0?2.3:6;moveBody(player,velocity.x*speed*dt,velocity.z*speed*dt);vy-=22*dt;player.position.y+=vy*dt;const floor=floorAt(player.position.x,player.position.z,player.position.y-vy*dt);if(player.position.y<=floor&&vy<=0){player.position.y=floor;vy=0;grounded=true;}else grounded=false;
-player.userData.legs.forEach((leg:T.Mesh,i:number)=>{leg.rotation.x=Math.sin(time*12+i*Math.PI)*.55*(velocity.lengthSq()>0?1:0);});player.userData.torso.rotation.z=dodgeT>0?-.3:0;
-if(attackT>0){attackT-=dt;const p=1-attackT/.48;let target:Enemy|undefined;let near=4.3;for(const e of enemies){const dist=e.mesh.position.distanceTo(player.position);if(!e.dead&&dist<near){near=dist;target=e;}}if(target){const diff=target.mesh.position.clone().sub(player.position);player.rotation.y=Math.atan2(diff.x,diff.z);}player.userData.pivot.rotation.set(Math.PI/2,0,-2+p*5);swing.visible=true;swing.position.copy(player.position).add(new T.Vector3(0,1.25,0));swing.rotation.z=player.rotation.y-p*5;(swing.material as T.MeshBasicMaterial).opacity=Math.sin(p*Math.PI)*.65;
-if(p>.25&&p<.8)for(const e of enemies){if(e.dead||hitSet.has(e))continue;const diff=e.mesh.position.clone().sub(player.position);const dist=Math.hypot(diff.x,diff.z);const facing=new T.Vector3(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));if(dist<(e.boss?3.8:3.1)&&Math.abs(diff.y)<2.3&&diff.normalize().dot(facing)>-.25){hitSet.add(e);e.hp-=combo===2?42:27;sparks(e.mesh.position);ring(e.mesh.position,'#dfb16a',1,.25);sound(95,.15,'sawtooth',.035);if(!e.boss){e.wind=0;e.cool=.65;moveBody(e.mesh,diff.x*.35,diff.z*.35);}if(e.hp<=0){e.dead=true;kills++;e.mesh.visible=false;e.label.style.display='none';const drop=sphere(.19,new T.MeshStandardMaterial({color:'#ffe7a0',emissive:'#ffb83c',emissiveIntensity:2}),e.mesh.position.x,.6,e.mesh.position.z,scene);drops.push(drop);notice(e.boss?'镇庭石狮 · 已击破':'石魇消散');if(e.boss)finish(true);}}}if(attackT<=0&&queued){queued=false;startAttack();}}else{swing.visible=false;player.userData.pivot.rotation.set(0,0,-.25);}
-for(const e of enemies){if(e.dead)continue;const diff=player.position.clone().sub(e.mesh.position),dist=Math.hypot(diff.x,diff.z);e.cool-=dt;e.mesh.rotation.y=Math.atan2(diff.x,diff.z);if(e.wind>0){e.wind-=dt;e.mesh.userData.pivot.rotation.x=-.25+e.wind*.6;if(e.wind<=0&&dist<(e.boss?3.5:2.3)&&Math.abs(diff.y)<2&&invulnerable<=0){hp=Math.max(0,hp-(e.boss?23:11));hurt=.6;invulnerable=.55;sound(60,.22,'sawtooth');ring(player.position,'#c94b30',1,.3);if(hp<=0)finish(false);}}else if(dist< (e.boss?2.9:1.8)&&Math.abs(diff.y)<2&&e.cool<=0){e.wind=e.boss?.9:.65;e.cool=e.boss?2.1:1.9;ring(e.mesh.position,'#e85a35',e.boss?3.5:2.1,e.wind);}else if(dist< (e.boss?12:10)&&dist>1.5){diff.y=0;diff.normalize();moveBody(e.mesh,diff.x*dt*(e.boss?2:2.7),diff.z*dt*(e.boss?2:2.7));e.mesh.userData.legs.forEach((leg:T.Mesh,i:number)=>leg.rotation.x=Math.sin(time*9+i*Math.PI)*.4);e.mesh.userData.pivot.rotation.x=0;}else{e.mesh.userData.legs.forEach((leg:T.Mesh)=>leg.rotation.x=0);}for(const other of enemies){if(other===e||other.dead)continue;const separation=e.mesh.position.clone().sub(other.mesh.position);separation.y=0;const d=separation.length();if(d>0&&d<.9){separation.normalize();moveBody(e.mesh,separation.x*dt,separation.z*dt);}}}
+function update(dt:number){time+=dt;invulnerable=Math.max(0,invulnerable-dt);dodgeT=Math.max(0,dodgeT-dt);ultCd=Math.max(0,ultCd-dt);stamina=Math.min(100,stamina+dt*19);const forward=new T.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));const right=new T.Vector3(Math.cos(yaw),0,-Math.sin(yaw));velocity.set(0,0,0);if(keys.has('KeyW'))velocity.add(forward);if(keys.has('KeyS'))velocity.sub(forward);if(keys.has('KeyD'))velocity.add(right);if(keys.has('KeyA'))velocity.sub(right);velocity.normalize();if(velocity.lengthSq()>0&&attackT<=0)player.rotation.y=Math.atan2(velocity.x,velocity.z);if(dodgeT>0){velocity.set(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));}const speed=dodgeT>0?13:ultT>0?1.2:attackT>0?2.3:6;moveBody(player,velocity.x*speed*dt,velocity.z*speed*dt);vy-=22*dt;player.position.y+=vy*dt;const floor=floorAt(player.position.x,player.position.z,player.position.y-vy*dt);if(player.position.y<=floor&&vy<=0){player.position.y=floor;vy=0;grounded=true;}else grounded=false;
+const moving=velocity.lengthSq()>0&&attackT<=0&&dodgeT<=0;
+player.userData.movePose=T.MathUtils.damp(player.userData.movePose,moving?1:0,10,dt);
+const bob=Math.sin(time*11)*player.userData.movePose;
+(player.userData.visual as T.Group).position.y=bob*.06+(dodgeT>0?0.18:0);
+(player.userData.visual as T.Group).rotation.z=dodgeT>0?-0.35:Math.sin(time*11)*.04*player.userData.movePose;
+(player.userData.visual as T.Group).rotation.x=moving?-0.08:0;
+player.userData.legs.forEach((leg:T.Object3D,i:number)=>{leg.rotation.x=Math.sin(time*12+i*Math.PI)*.55*player.userData.movePose;});
+player.userData.torso.rotation.z=dodgeT>0?-0.2:0;
+if(ultT>0){
+ ultT-=dt;
+ const p=1-Math.max(ultT,0)/.95;
+ const vis=player.userData.visual as T.Group;
+ vis.rotation.y=p*Math.PI*2; vis.rotation.x=-0.15+Math.sin(p*Math.PI)*0.45;
+ const facing=new T.Vector3(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));
+ const origin=player.position.clone().add(new T.Vector3(0,1.25,0));
+ if(p<.85){
+  beam(origin,facing,7.5,'#ffe7a0',.12,.12);
+  beam(origin,facing.clone().add(new T.Vector3(0,0.08,0)).normalize(),6.8,'#fff3c4',.1,.05);
+  if(Math.random()<.4)sparks(origin.clone().add(facing.clone().multiplyScalar(2+rand()*4)),2,'#ffe29a');
+ }
+ swing.visible=true;swing.scale.setScalar(1.6);swing.position.copy(player.position).add(new T.Vector3(0,1.3,0));
+ swing.rotation.z=player.rotation.y-p*Math.PI*2;(swing.material as T.MeshBasicMaterial).color.set('#fff1c2');
+ (swing.material as T.MeshBasicMaterial).opacity=Math.sin(p*Math.PI)*.9;
+ if(p>.18&&p<.9){
+  for(const e of enemies){
+   if(e.dead)continue;
+   const diff=e.mesh.position.clone().sub(player.position);const dist=Math.hypot(diff.x,diff.z);
+   const facing2=new T.Vector3(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));
+   const aligned=diff.clone().normalize().dot(facing2);
+   if(dist<8.5&&aligned>0.35&&Math.abs(diff.y)<3){
+    if(!ultHit||!hitSet.has(e)){hitSet.add(e);e.hp-=22;sparks(e.mesh.position,10,'#ffe29a');ring(e.mesh.position,'#ffe29a',1.6,.25);sound(120,.12,'sawtooth',.04);moveBody(e.mesh,diff.x*.2,diff.z*.2);}
+    if(e.hp<=0){e.dead=true;kills++;e.mesh.visible=false;e.label.style.display='none';const drop=sphere(.19,new T.MeshStandardMaterial({color:'#ffe7a0',emissive:'#ffb83c',emissiveIntensity:2}),e.mesh.position.x,.6,e.mesh.position.z,scene);drops.push(drop);notice(e.boss?'镇山巨兽 · 已击破':'石魇消散');if(e.boss)finish(true);}
+   }
+  }
+  ultHit=true;
+ }
+ if(ultT<=0){swing.visible=false;vis.rotation.set(0,0,0);hitSet.clear();}
+}else if(attackT>0){
+ attackT-=dt;
+ const dur=combo===2?.62:.48;
+ const p=1-Math.max(attackT,0)/dur;
+ let target:Enemy|undefined;let near=4.6;
+ for(const e of enemies){const dist=e.mesh.position.distanceTo(player.position);if(!e.dead&&dist<near){near=dist;target=e;}}
+ if(target){const diff=target.mesh.position.clone().sub(player.position);player.rotation.y=Math.atan2(diff.x,diff.z);}
+ // Three staff arts: sweep / lift / spinning slam
+ const vis=player.userData.visual as T.Group;
+ if(combo===0){vis.rotation.y=Math.sin(p*Math.PI)*1.35;vis.rotation.x=-0.12+Math.sin(p*Math.PI)*0.18;player.userData.pivot.rotation.set(0.2,0,-1.2+p*3.4);}
+ else if(combo===1){vis.rotation.y=Math.sin(p*Math.PI)*0.55;vis.rotation.x=-0.35+p*0.9;player.userData.pivot.rotation.set(-1.1+p*2.4,0.2,0.4);}
+ else{vis.rotation.y=p*Math.PI*2;vis.rotation.x=-0.2+Math.sin(p*Math.PI)*0.55;player.userData.pivot.rotation.set(Math.PI/2,p*2,-0.4);}
+ if(Math.floor(p*12)%3===0)staffSlashTrail(player.position,player.rotation.y,combo);
+ swing.visible=true;
+ swing.scale.setScalar(combo===2?1.35:1);
+ swing.position.copy(player.position).add(new T.Vector3(0,1.15+combo*0.08,0));
+ swing.rotation.z=player.rotation.y-(combo===2?p*Math.PI*2:p*(combo===0?4.2:2.6));
+ (swing.material as T.MeshBasicMaterial).color.set(combo===2?'#ffd28a':'#ffe0a0');
+ (swing.material as T.MeshBasicMaterial).opacity=Math.sin(p*Math.PI)*(combo===2?.85:.65);
+ const hitStart=combo===2?.2:.25, hitEnd=combo===2?.88:.8;
+ const reach=combo===2?4.4:combo===1?3.6:3.9;
+ const dmg=combo===2?48:combo===1?32:27;
+ if(p>hitStart&&p<hitEnd)for(const e of enemies){
+  if(e.dead||hitSet.has(e))continue;
+  const diff=e.mesh.position.clone().sub(player.position);
+  const dist=Math.hypot(diff.x,diff.z);
+  const facing=new T.Vector3(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));
+  if(dist<(e.boss?reach+.4:reach)&&Math.abs(diff.y)<2.6&&diff.normalize().dot(facing)>-.2){
+   hitSet.add(e);e.hp-=dmg;sparks(e.mesh.position);ring(e.mesh.position,combo===2?'#ffb454':'#dfb16a',combo===2?1.45:1,.28);
+   sound(95-combo*8,.15,'sawtooth',.04);
+   moveBody(e.mesh,diff.x*(.28+combo*.12),diff.z*(.28+combo*.12));
+   if(!e.boss){e.wind=0;e.cool=.55;}
+   if(e.hp<=0){e.dead=true;kills++;e.mesh.visible=false;e.label.style.display='none';const drop=sphere(.19,new T.MeshStandardMaterial({color:'#ffe7a0',emissive:'#ffb83c',emissiveIntensity:2}),e.mesh.position.x,.6,e.mesh.position.z,scene);drops.push(drop);notice(e.boss?'镇山巨兽 · 已击破':'石魇消散');if(e.boss)finish(true);}
+  }
+ }
+ if(attackT<=0&&queued){queued=false;startAttack();}
+}else{
+ swing.visible=false;
+ player.userData.pivot.rotation.set(0,0,0);
+ if(dodgeT<=0){(player.userData.visual as T.Group).rotation.y=0;(player.userData.visual as T.Group).rotation.x=moving?-0.08:0;}
+}
+for(const e of enemies){
+ if(e.dead)continue;
+ const diff=player.position.clone().sub(e.mesh.position),dist=Math.hypot(diff.x,diff.z);
+ e.cool-=dt;e.mesh.rotation.y=Math.atan2(diff.x,diff.z);
+ // Boss fire breath channel
+ if(e.fireT>0){
+  e.fireT-=dt;
+  const bvis=e.mesh.userData.visual as T.Group|undefined;
+  if(bvis){bvis.rotation.x=-0.35;bvis.position.y=0.25;}
+  if(Math.floor(e.fireT*20)%4===0)fireCone(e.mesh.position,e.mesh.rotation.y,.28);
+  const face=new T.Vector3(Math.sin(e.mesh.rotation.y),0,Math.cos(e.mesh.rotation.y));
+  const toPlayer=diff.clone(); toPlayer.y=0; const align=toPlayer.length()>0?toPlayer.normalize().dot(face):0;
+  if(dist<9&&align>0.55&&Math.abs(diff.y)<3&&invulnerable<=0&&e.fireT<0.95){
+   hp=Math.max(0,hp-18*dt);hurt=.55; if(Math.random()<.08)sound(70,.08,'sawtooth',.03);
+   if(hp<=0)finish(false);
+  }
+  if(e.fireT<=0){if(bvis){bvis.rotation.x=0;bvis.position.y=0;} e.cool=1.6;}
+ }else if(e.wind>0){
+  e.wind-=dt;e.mesh.userData.pivot.rotation.x=-.25+e.wind*.6;
+  const bvis=e.mesh.userData.visual as T.Group|undefined;
+  if(e.boss&&bvis){const wp=1-Math.max(e.wind,0)/(e.boss?1.15:.65);bvis.rotation.x=-0.25+wp*0.85;bvis.position.y=wp*0.35;}
+  if(e.wind<=0&&dist<(e.boss?4.2:2.3)&&Math.abs(diff.y)<2.8&&invulnerable<=0){
+   hp=Math.max(0,hp-(e.boss?28:11));hurt=.75;invulnerable=.55;sound(e.boss?38:60,.28,'sawtooth',.06);
+   ring(player.position,'#c94b30',e.boss?1.8:1,.35);
+   if(e.boss){ring(e.mesh.position,'#ff6a3a',4.5,.4);sparks(player.position,10,'#ff8a4a');}
+   if(hp<=0)finish(false);
+  }
+ }else if(dist<(e.boss?3.8:1.8)&&Math.abs(diff.y)<2.8&&e.cool<=0){
+  // choose stomp vs fire for boss
+  if(e.boss && e.pattern%2===1){
+   e.fireT=1.25; e.cool=2.8; e.pattern++; notice('镇山巨兽 · 熔岩吐息'); sound(55,.35,'sawtooth',.06); ring(e.mesh.position,'#ff7a30',3.2,.4);
+  }else{
+   e.wind=e.boss?1.15:.65; e.cool=e.boss?2.35:1.9; e.pattern++;
+   ring(e.mesh.position,'#e85a35',e.boss?5.2:2.1,e.wind);
+   if(e.boss){notice('镇山巨兽 · 踏地蓄力');sound(45,.28,'sawtooth',.05);}
+  }
+ }else if(dist<(e.boss?16:10)&&dist>1.8){
+  diff.y=0;diff.normalize();moveBody(e.mesh,diff.x*dt*(e.boss?2.6:2.7),diff.z*dt*(e.boss?2.6:2.7));
+  const vis=e.mesh.userData.visual as T.Group|undefined;
+  if(vis){vis.position.y=Math.sin(time*6)*.08;vis.rotation.z=Math.sin(time*4)*.05;}
+  e.mesh.userData.legs.forEach((leg:T.Object3D,i:number)=>leg.rotation.x=Math.sin(time*9+i*Math.PI)*.4);
+  e.mesh.userData.pivot.rotation.x=0;
+ }else{
+  e.mesh.userData.legs.forEach((leg:T.Object3D)=>leg.rotation.x=0);
+  const vis=e.mesh.userData.visual as T.Group|undefined;
+  if(vis&&e.wind<=0&&e.fireT<=0){vis.position.y=0;vis.rotation.z=0;vis.rotation.x=0;}
+ }
+ for(const other of enemies){if(other===e||other.dead)continue;const separation=e.mesh.position.clone().sub(other.mesh.position);separation.y=0;const d=separation.length();if(d>0&&d<.9){separation.normalize();moveBody(e.mesh,separation.x*dt,separation.z*dt);}}
+}
 for(let i=drops.length-1;i>=0;i--){const d=drops[i];d.position.y=.65+Math.sin(time*3)*.16;if(d.position.distanceTo(player.position)<1.7){hp=Math.min(100,hp+18);scene.remove(d);drops.splice(i,1);sound(620,.25);notice('灵息入体 · 生命 +18');}}
 }
-function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.033);if(running)update(dt);for(let i=effects.length-1;i>=0;i--){const e=effects[i];if(running)e.life-=dt;(e.mesh.material as T.MeshBasicMaterial).opacity=Math.max(0,e.life/e.max);if(e.life<=0){scene.remove(e.mesh);e.mesh.geometry.dispose();(e.mesh.material as T.Material).dispose();effects.splice(i,1);}}
+function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.033);if(running)update(dt);for(let i=effects.length-1;i>=0;i--){const e=effects[i];if(running){e.life-=dt;if(e.vx||e.vy||e.vz){e.mesh.position.x+=(e.vx||0)*dt;e.mesh.position.y+=(e.vy||0)*dt;e.mesh.position.z+=(e.vz||0)*dt;if(e.vy!==undefined)e.vy-=6*dt;}if(e.grow){const s=1+(1-Math.max(e.life,0)/e.max)*e.grow;e.mesh.scale.setScalar(s);}}const mat=e.mesh.material as T.MeshBasicMaterial|T.MeshStandardMaterial;if('opacity' in mat)mat.opacity=Math.max(0,e.life/e.max)*('emissiveIntensity' in mat?1:.95);if(e.life<=0){scene.remove(e.mesh);e.mesh.geometry.dispose();(e.mesh.material as T.Material).dispose();effects.splice(i,1);}}
 const t=performance.now()/1000;banners.forEach((b,i)=>{b.rotation.x=Math.sin(t*1.5+i)*.045;b.rotation.z=Math.sin(t+i)*.025;});flames.forEach((f,i)=>(f.material as T.MeshStandardMaterial).emissiveIntensity=1.8+Math.sin(t*5+i)*.25);
 look.copy(player.position).add(new T.Vector3(0,1.3,0));desired.copy(look).add(new T.Vector3(Math.sin(yaw)*8.2,1.7+pitch*4,Math.cos(yaw)*8.2));desired.x=T.MathUtils.clamp(desired.x,-22,22);desired.z=T.MathUtils.clamp(desired.z,-22,24);camera.position.lerp(desired,1-Math.exp(-dt*8));camera.lookAt(look);
-for(const e of enemies){project.copy(e.mesh.position);project.y+=e.boss?4.1:2.8;project.project(camera);e.label.style.display=started&&!e.dead&&project.z<1&&project.z>0?'block':'none';e.label.style.left=`${(project.x*.5+.5)*innerWidth}px`;e.label.style.top=`${(-project.y*.5+.5)*innerHeight}px`;e.label.querySelector('i')!.style.width=`${Math.max(0,e.hp/e.max*100)}%`;}
+for(const e of enemies){project.copy(e.mesh.position);project.y+=e.boss?5.2:2.8;project.project(camera);e.label.style.display=started&&!e.dead&&project.z<1&&project.z>0?'block':'none';e.label.style.left=`${(project.x*.5+.5)*innerWidth}px`;e.label.style.top=`${(-project.y*.5+.5)*innerHeight}px`;e.label.querySelector('i')!.style.width=`${Math.max(0,e.hp/e.max*100)}%`;}
 el('hp').style.width=`${hp}%`;el('hpText').textContent=`${hp} / 100`;el('stamina').style.width=`${stamina}%`;el('count').textContent=String(kills);hurt=Math.max(0,hurt-dt);el('hurt').style.opacity=String(hurt*.7);if(running)noticeT=Math.max(0,noticeT-dt);el('notice').style.opacity=noticeT>0?'1':'0';renderer.render(scene,camera);}
 camera.position.set(0,5.7,20);frame();window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 // Read-only snapshot for browser smoke tests and diagnostics.

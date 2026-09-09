@@ -1,8 +1,12 @@
 {
   "player": {
-    "triangles": 8132
+    "source": "tripo text_to_model v3.1 detailed PBR",
+    "task_id": "290e86b6-9dc4-4672-aacd-8135182c2e5e",
+    "bytes": 4643424
   },
   "boss": {
-    "triangles": 23258
+    "source": "tripo kaiju \u9547\u5c71\u5de8\u517d v3.1 detailed",
+    "task_id": "0b854a9b-c242-458b-8674-bd198898a6a0",
+    "bytes": 6396776
   }
 }
