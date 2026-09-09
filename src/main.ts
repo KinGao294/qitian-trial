@@ -77,6 +77,7 @@ const player=warrior();player.position.set(0,0,12);
 type Enemy={mesh:T.Group,hp:number,max:number,boss:boolean,home:T.Vector3,cool:number,wind:number,fireT:number,hit:boolean,dead:boolean,label:HTMLDivElement,pattern:number};
 const enemies:Enemy[]=[];for(const [x,z,boss] of [[0,-7,1]]){const mesh=warrior(true,!!boss);mesh.position.set(x,0,z);const label=document.createElement('div');label.className='enemy-label'+(boss?' boss-label':'');label.innerHTML=`${boss?'镇山巨兽':'石魇'}<i></i>`;document.body.append(label);enemies.push({mesh,hp:boss?380:80,max:boss?380:80,boss:!!boss,home:mesh.position.clone(),cool:1+rand(),wind:0,fireT:0,hit:false,dead:false,label,pattern:0});}
 const gltfLoader=new GLTFLoader(manager);
+let playerMixer:T.AnimationMixer|undefined; let locoActions:{idle?:T.AnimationAction,walk?:T.AnimationAction}={}; let mixerActive=false; let hitstop=0;
 const MOVE_NAMES=['横扫破风','挑棍穿云','旋砸定山'];
 async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  const {scene:model}=await gltfLoader.loadAsync(assetUrl(`models/${file}.glb`));
@@ -98,7 +99,7 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  model.position.y-=box.min.y;
  // Gameplay roots use the existing atan2 yaw convention; Tripo meshes face ±X,
  // so rotate the loaded visual to align its nose with gameplay forward.
- const NOSE_YAW_OFFSET=Math.PI/2;
+ const NOSE_YAW_OFFSET=-Math.PI/2;
  model.rotation.y=NOSE_YAW_OFFSET;
  const visual=root.userData.visual as T.Group;
  visual.add(model);
@@ -112,7 +113,8 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  root.userData.model=model;
 }
 manager.onError=(url)=>{el('description').textContent=`美术资源加载失败，请刷新重试：${url}`;};
-Promise.all([loadCharacter(player,'player',1.9),loadCharacter(enemies[0].mesh,'boss',4.2)]).then(()=>{
+async function loadLoco(){ try { const g=await gltfLoader.loadAsync(assetUrl('../tripo-out/player-anim/loco/tripo-out/player-loco-fe697f9f/model.glb')); const model=g.scene; model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;}}); const b=new T.Box3().setFromObject(model), sz=b.getSize(new T.Vector3()); model.scale.setScalar(1.9/Math.max(sz.y,.001)); b.setFromObject(model); model.position.y-=b.min.y; model.rotation.y=-Math.PI/2; const visual=player.userData.visual as T.Group; visual.clear(); visual.add(model); playerMixer=new T.AnimationMixer(model); for(const clip of g.animations){const n=clip.name.toLowerCase(); if(n.includes('idle')) locoActions.idle=playerMixer.clipAction(clip); if(n.includes('walk')) locoActions.walk=playerMixer.clipAction(clip);} locoActions.idle?.play(); mixerActive=!!(locoActions.idle&&locoActions.walk); } catch(e){ console.warn('[trial] loco unavailable, using player.glb',e); } }
+Promise.all([loadCharacter(player,'player',1.9),loadCharacter(enemies[0].mesh,'boss',4.2)]).then(async()=>{ await loadLoco();
  artReady=true;startButton.disabled=false;startButton.textContent='踏 入 山 门　→';
 }).catch((err)=>{ console.error(err); artReady=true; startButton.disabled=false; startButton.textContent='踏 入 山 门　→'; showError(err); });
 const keys=new Set<string>();let touchMoveX=0,touchMoveY=0;let running=false,started=false,ended=false,paused=false,hp=100,stamina=100,yaw=0,pitch=.35,vy=0,grounded=true,attackT=0,combo=0,queued=false,lastAttack=-10,dodgeT=0,invulnerable=0,kills=0,time=0,hurt=0,noticeT=0,ultT=0,ultCd=0,ultHit=false;const hitSet=new Set<Enemy>();const velocity=new T.Vector3();// Gameplay roots use atan2 velocity; visual models apply the shared Tripo nose offset.
@@ -127,7 +129,7 @@ function startUltimate(){
  notice('行者 · 定海神针');sound(90,.35,'sawtooth',.07);sound(420,.4,'triangle',.05);
  ring(player.position,'#ffe29a',2.6,.45);
 }
-function dodge(){if(!running||stamina<30||dodgeT>0||ultT>0)return;stamina-=30;dodgeT=.42;invulnerable=.5;attackT=0;sound(140,.15,'sine');notice('行者 · 纵身闪避');ring(player.position,'#9ad7ff',1.4,.28);}
+function dodge(){if(!running||stamina<30||dodgeT>0||ultT>0)return;if(attackT>0 && (1-attackT/(combo===2?.62:.48))<.4)return;stamina-=30;dodgeT=.42;invulnerable=.5;attackT=0;sound(140,.15,'sine');notice('行者 · 纵身闪避');ring(player.position,'#9ad7ff',1.4,.28);}
 const coarse=isLikelyTouch;
 let touchSeen=false;
 window.addEventListener('touchstart',()=>{touchSeen=true;},{passive:true});let joyId=-1,lookId=-1,lastLX=0,lastLY=0;
@@ -181,14 +183,15 @@ function floorAt(x:number,z:number,y:number){let floor=0;for(const s of solids)i
 function moveBody(obj:T.Object3D,dx:number,dz:number){for(const [ax,amount] of [['x',dx],['z',dz]] as const){obj.position[ax]=T.MathUtils.clamp(obj.position[ax]+amount,-21.8,21.8);for(const s of solids){if(obj.position.y>=s.h-.12)continue;if(Math.abs(obj.position.x-s.x)<s.w/2+.36&&Math.abs(obj.position.z-s.z)<s.d/2+.36){obj.position[ax]=s[ax]+Math.sign(obj.position[ax]-s[ax]||-amount)*(s[ax==='x'?'w':'d']/2+.36);}}}}
 const swing=new T.Mesh(new T.TorusGeometry(1.9,.045,5,45,Math.PI*1.3),new T.MeshBasicMaterial({color:'#ffe0a0',transparent:true,opacity:.7,depthWrite:false}));swing.rotation.x=Math.PI/2;scene.add(swing);
 const clock=new T.Clock();const look=new T.Vector3(),desired=new T.Vector3(),project=new T.Vector3();
-function update(dt:number){time+=dt;invulnerable=Math.max(0,invulnerable-dt);dodgeT=Math.max(0,dodgeT-dt);ultCd=Math.max(0,ultCd-dt);stamina=Math.min(100,stamina+dt*19);const forward=new T.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));const right=new T.Vector3(Math.cos(yaw),0,-Math.sin(yaw));velocity.set(0,0,0);if(keys.has('KeyW'))velocity.add(forward);if(keys.has('KeyS'))velocity.sub(forward);if(keys.has('KeyD'))velocity.add(right);if(keys.has('KeyA'))velocity.sub(right);velocity.normalize();if(velocity.lengthSq()>0&&attackT<=0)player.rotation.y=Math.atan2(velocity.x,velocity.z);if(dodgeT>0){velocity.set(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));}const speed=dodgeT>0?13:ultT>0?1.2:attackT>0?2.3:6;moveBody(player,velocity.x*speed*dt,velocity.z*speed*dt);vy-=22*dt;player.position.y+=vy*dt;const floor=floorAt(player.position.x,player.position.z,player.position.y-vy*dt);if(player.position.y<=floor&&vy<=0){player.position.y=floor;vy=0;grounded=true;}else grounded=false;
+function update(dt:number){if(hitstop>0){hitstop-=dt;dt=0;} time+=dt; if(playerMixer) playerMixer.update(dt);invulnerable=Math.max(0,invulnerable-dt);dodgeT=Math.max(0,dodgeT-dt);ultCd=Math.max(0,ultCd-dt);stamina=Math.min(100,stamina+dt*19);const forward=new T.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));const right=new T.Vector3(Math.cos(yaw),0,-Math.sin(yaw));velocity.set(0,0,0);if(keys.has('KeyW'))velocity.add(forward);if(keys.has('KeyS'))velocity.sub(forward);if(keys.has('KeyD'))velocity.add(right);if(keys.has('KeyA'))velocity.sub(right);velocity.normalize();if(velocity.lengthSq()>0&&attackT<=0)player.rotation.y=Math.atan2(velocity.x,velocity.z);if(dodgeT>0){velocity.set(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));}const speed=dodgeT>0?13:ultT>0?1.2:attackT>0?2.3:6;moveBody(player,velocity.x*speed*dt,velocity.z*speed*dt);vy-=22*dt;player.position.y+=vy*dt;const floor=floorAt(player.position.x,player.position.z,player.position.y-vy*dt);if(player.position.y<=floor&&vy<=0){player.position.y=floor;vy=0;grounded=true;}else grounded=false;
 const moving=velocity.lengthSq()>0&&attackT<=0&&dodgeT<=0;
 player.userData.movePose=T.MathUtils.damp(player.userData.movePose,moving?1:0,10,dt);
+if(mixerActive){ const w=moving?1:0; locoActions.walk?.setEffectiveWeight(w); locoActions.idle?.setEffectiveWeight(1-w); locoActions.walk?.fadeIn(.12); locoActions.idle?.fadeIn(.12); }
 const bob=Math.sin(time*11)*player.userData.movePose;
 (player.userData.visual as T.Group).position.y=bob*.06+(dodgeT>0?0.18:0);
 (player.userData.visual as T.Group).rotation.z=dodgeT>0?-0.35:Math.sin(time*11)*.04*player.userData.movePose;
 (player.userData.visual as T.Group).rotation.x=moving?-0.08:0;
-player.userData.legs.forEach((leg:T.Object3D,i:number)=>{leg.rotation.x=Math.sin(time*12+i*Math.PI)*.55*player.userData.movePose;});
+if(!mixerActive) player.userData.legs.forEach((leg:T.Object3D,i:number)=>{leg.rotation.x=Math.sin(time*12+i*Math.PI)*.55*player.userData.movePose;});
 player.userData.torso.rotation.z=dodgeT>0?-0.2:0;
 if(ultT>0){
  ultT-=dt;
@@ -247,7 +250,7 @@ if(ultT>0){
   const dist=Math.hypot(diff.x,diff.z);
   const facing=new T.Vector3(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));
   if(dist<(e.boss?reach+.4:reach)&&Math.abs(diff.y)<2.6&&diff.normalize().dot(facing)>-.2){
-   hitSet.add(e);e.hp-=dmg;sparks(e.mesh.position);ring(e.mesh.position,combo===2?'#ffb454':'#dfb16a',combo===2?1.45:1,.28);
+   hitSet.add(e);e.hp-=dmg;hitstop=.05;shake=Math.max(shake,.16);sparks(e.mesh.position);ring(e.mesh.position,combo===2?'#ffb454':'#dfb16a',combo===2?1.45:1,.28);
    sound(95-combo*8,.15,'sawtooth',.04);
    moveBody(e.mesh,diff.x*(.28+combo*.12),diff.z*(.28+combo*.12));
    if(!e.boss){e.wind=0;e.cool=.55;}
