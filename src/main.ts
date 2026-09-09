@@ -67,10 +67,10 @@ const motes=new T.BufferGeometry();const motePos=new Float32Array(180*3);for(let
 // Keep gameplay roots stable; Tripo GLB provides visuals. Missing bone names get safe pivots.
 function warrior(_enemy=false,boss=false){
  const g=new T.Group(); g.name=boss?'Boss':'Player';
- const visual=new T.Group(); visual.name='Visual'; g.add(visual);
+ const visual=new T.Group(); visual.name='Visual'; g.add(visual); const orient=new T.Group(); orient.name='TripoOrient'; orient.rotation.set(-Math.PI/2,Math.PI,0); visual.add(orient);
  const pivot=new T.Group(); pivot.name='WeaponPivot'; visual.add(pivot);
  const torso=new T.Group(); torso.name='TorsoPivot'; visual.add(torso);
- g.userData={legs:[] as T.Object3D[],pivot,torso,visual,baseYaw:0,movePose:0};
+ g.userData={legs:[] as T.Object3D[],pivot,torso,visual,orient,baseYaw:0,movePose:0};
  scene.add(g);return g;
 }
 const player=warrior();player.position.set(0,0,12);
@@ -99,9 +99,9 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  model.position.y-=box.min.y;
  // AABB inspection confirms the Tripo rest pose faces -X; rotate it to gameplay +Z.
  const NOSE_YAW_OFFSET=-Math.PI/2;
- model.rotation.y=NOSE_YAW_OFFSET;
- const visual=root.userData.visual as T.Group;
- visual.add(model);
+ model.rotation.y=0;
+ const visual=root.userData.visual as T.Group; const orient=root.userData.orient as T.Group;
+ orient.add(model);
  const legL=model.getObjectByName('Leg_L')||new T.Object3D();
  const legR=model.getObjectByName('Leg_R')||new T.Object3D();
  const weapon=model.getObjectByName('Weapon')||root.userData.pivot;
@@ -112,8 +112,9 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  root.userData.model=model;
 }
 manager.onError=(url)=>{el('description').textContent=`美术资源加载失败，请刷新重试：${url}`;};
-async function loadLoco(){ try { const g=await gltfLoader.loadAsync(assetUrl('models/player-loco.glb')); const model=g.scene; model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;}}); const b=new T.Box3().setFromObject(model), sz=b.getSize(new T.Vector3()); model.scale.setScalar(1.9/Math.max(sz.y,.001)); b.setFromObject(model); model.position.y-=b.min.y; model.rotation.y=-Math.PI/2; const visual=player.userData.visual as T.Group; visual.clear(); visual.add(model); playerMixer=new T.AnimationMixer(model); for(const clip of g.animations){const n=clip.name.toLowerCase(); if(n.includes('idle')) locoActions.idle=playerMixer.clipAction(clip); if(n.includes('walk')) locoActions.walk=playerMixer.clipAction(clip);} locoActions.idle?.play(); mixerActive=!!(locoActions.idle&&locoActions.walk); } catch(e){ console.warn('[trial] loco unavailable, using player.glb',e); } }
-Promise.all([loadCharacter(player,'player',1.9),loadCharacter(enemies[0].mesh,'boss',4.2)]).then(async()=>{ await loadLoco();
+function attachStaff(root:T.Group){ const hand=[5,4,3,2,1,0].map(i=>root.userData.model?.getObjectByName(`tripo::1_Right_Limb_${i}`)).find(Boolean) as T.Object3D|undefined; const parent=hand||root.userData.pivot; const g=new T.Group(); g.name='DinghaiStaff'; const shaft=cyl(.055,.07,2.5,black,0,0,0,g,12); shaft.rotation.z=Math.PI/2; const tip=cyl(.11,.04,.22,gold,1.28,0,0,g,10); tip.rotation.z=Math.PI/2; g.rotation.set(0,0,Math.PI/2); g.position.set(0,.05,0); parent.add(g); }
+async function loadLoco(){ try { const g=await gltfLoader.loadAsync(assetUrl('models/player-loco.glb')); const model=g.scene; model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;}}); const b=new T.Box3().setFromObject(model), sz=b.getSize(new T.Vector3()); model.scale.setScalar(1.9/Math.max(sz.y,.001)); b.setFromObject(model); model.position.y-=b.min.y; const visual=player.userData.visual as T.Group; const orient=player.userData.orient as T.Group; orient.clear(); orient.add(model); player.userData.model=model; console.info('[trial] TripoOrient Euler (-PI/2, PI, 0)'); playerMixer=new T.AnimationMixer(model); for(const clip of g.animations){const n=clip.name.toLowerCase(); if(n.includes('idle')) locoActions.idle=playerMixer.clipAction(clip); if(n.includes('walk')) locoActions.walk=playerMixer.clipAction(clip);} locoActions.idle?.play(); mixerActive=!!(locoActions.idle&&locoActions.walk); } catch(e){ console.warn('[trial] loco unavailable, using player.glb',e); } }
+Promise.all([loadCharacter(player,'player',1.9),loadCharacter(enemies[0].mesh,'boss',4.2)]).then(async()=>{ await loadLoco(); attachStaff(player);
  artReady=true;startButton.disabled=false;startButton.textContent='踏 入 山 门　→';
 }).catch((err)=>{ console.error(err); artReady=true; startButton.disabled=false; startButton.textContent='踏 入 山 门　→'; showError(err); });
 const keys=new Set<string>();let touchMoveX=0,touchMoveY=0;let running=false,started=false,ended=false,paused=false,hp=100,stamina=100,yaw=0,pitch=.35,vy=0,grounded=true,attackT=0,combo=0,queued=false,lastAttack=-10,dodgeT=0,invulnerable=0,kills=0,time=0,hurt=0,noticeT=0,ultT=0,ultCd=0,ultHit=false;const hitSet=new Set<Enemy>();const velocity=new T.Vector3();// Gameplay roots use atan2 velocity; visual models apply the shared Tripo nose offset.
@@ -271,7 +272,7 @@ for(const e of enemies){
   e.fireT-=dt;
   const bvis=e.mesh.userData.visual as T.Group|undefined;
   if(bvis){bvis.rotation.x=-0.35;bvis.position.y=0.25;}
-  if(Math.floor(e.fireT*20)%4===0)fireCone(e.mesh.position,e.mesh.rotation.y,.28);
+  if(Math.floor(e.fireT*12)%8===0)fireCone(e.mesh.position,e.mesh.rotation.y,.28);
   const face=new T.Vector3(Math.sin(e.mesh.rotation.y),0,Math.cos(e.mesh.rotation.y));
   const toPlayer=diff.clone(); toPlayer.y=0; const align=toPlayer.length()>0?toPlayer.normalize().dot(face):0;
   if(dist<9&&align>0.55&&Math.abs(diff.y)<3&&invulnerable<=0&&e.fireT<0.95){
@@ -291,12 +292,12 @@ for(const e of enemies){
   }
  }else if(dist<(e.boss?3.8:1.8)&&Math.abs(diff.y)<2.8&&e.cool<=0){
   // choose stomp vs fire for boss
-  if(e.boss && e.pattern%2===1){
+  if(e.boss && Math.random()<.3){
    e.fireT=1.25; e.cool=2.8; e.pattern++; notice('镇山巨兽 · 熔岩吐息'); sound(55,.35,'sawtooth',.06); ring(e.mesh.position,'#ff7a30',3.2,.4);
   }else{
    e.wind=e.boss?1.15:.65; e.cool=e.boss?2.35:1.9; e.pattern++;
-   ring(e.mesh.position,'#e85a35',e.boss?5.2:2.1,e.wind);
-   if(e.boss){notice('镇山巨兽 · 踏地蓄力');sound(45,.28,'sawtooth',.05);}
+   ring(e.mesh.position,'#e85a35',e.boss?5.2:2.1,.3);
+   if(e.boss){notice(Math.random()<.5?'镇山巨兽 · 巨爪横扫':'镇山巨兽 · 砸地');sound(45,.28,'sawtooth',.05);}
   }
  }else if(dist<(e.boss?16:10)&&dist>1.8){
   diff.y=0;diff.normalize();moveBody(e.mesh,diff.x*dt*(e.boss?2.6:2.7),diff.z*dt*(e.boss?2.6:2.7));
