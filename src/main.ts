@@ -97,8 +97,7 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  model.scale.setScalar(scale);
  box.setFromObject(model);
  model.position.y-=box.min.y;
- // Gameplay roots use the existing atan2 yaw convention; Tripo meshes face ±X,
- // so rotate the loaded visual to align its nose with gameplay forward.
+ // AABB inspection confirms the Tripo rest pose faces -X; rotate it to gameplay +Z.
  const NOSE_YAW_OFFSET=-Math.PI/2;
  model.rotation.y=NOSE_YAW_OFFSET;
  const visual=root.userData.visual as T.Group;
@@ -186,11 +185,11 @@ const clock=new T.Clock();const look=new T.Vector3(),desired=new T.Vector3(),pro
 function update(dt:number){if(hitstop>0){hitstop-=dt;dt=0;} time+=dt; if(playerMixer) playerMixer.update(dt);invulnerable=Math.max(0,invulnerable-dt);dodgeT=Math.max(0,dodgeT-dt);ultCd=Math.max(0,ultCd-dt);stamina=Math.min(100,stamina+dt*19);const forward=new T.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));const right=new T.Vector3(Math.cos(yaw),0,-Math.sin(yaw));velocity.set(0,0,0);if(keys.has('KeyW'))velocity.add(forward);if(keys.has('KeyS'))velocity.sub(forward);if(keys.has('KeyD'))velocity.add(right);if(keys.has('KeyA'))velocity.sub(right);velocity.normalize();if(velocity.lengthSq()>0&&attackT<=0)player.rotation.y=Math.atan2(velocity.x,velocity.z);if(dodgeT>0){velocity.set(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));}const speed=dodgeT>0?13:ultT>0?1.2:attackT>0?2.3:6;moveBody(player,velocity.x*speed*dt,velocity.z*speed*dt);vy-=22*dt;player.position.y+=vy*dt;const floor=floorAt(player.position.x,player.position.z,player.position.y-vy*dt);if(player.position.y<=floor&&vy<=0){player.position.y=floor;vy=0;grounded=true;}else grounded=false;
 const moving=velocity.lengthSq()>0&&attackT<=0&&dodgeT<=0;
 player.userData.movePose=T.MathUtils.damp(player.userData.movePose,moving?1:0,10,dt);
-if(mixerActive){ const w=moving?1:0; locoActions.walk?.setEffectiveWeight(w); locoActions.idle?.setEffectiveWeight(1-w); locoActions.walk?.fadeIn(.12); locoActions.idle?.fadeIn(.12); }
-const bob=Math.sin(time*11)*player.userData.movePose;
+if(mixerActive){ const w=moving?1:0; locoActions.walk?.setEffectiveWeight(w); locoActions.idle?.setEffectiveWeight(1-w); }
+const bob=mixerActive?0:Math.sin(time*11)*player.userData.movePose;
 (player.userData.visual as T.Group).position.y=bob*.06+(dodgeT>0?0.18:0);
-(player.userData.visual as T.Group).rotation.z=dodgeT>0?-0.35:Math.sin(time*11)*.04*player.userData.movePose;
-(player.userData.visual as T.Group).rotation.x=moving?-0.08:0;
+(player.userData.visual as T.Group).rotation.z=dodgeT>0?-0.35:(mixerActive?0:Math.sin(time*11)*.04*player.userData.movePose);
+(player.userData.visual as T.Group).rotation.x=mixerActive?0:(moving?-0.08:0);
 if(!mixerActive) player.userData.legs.forEach((leg:T.Object3D,i:number)=>{leg.rotation.x=Math.sin(time*12+i*Math.PI)*.55*player.userData.movePose;});
 player.userData.torso.rotation.z=dodgeT>0?-0.2:0;
 if(ultT>0){
