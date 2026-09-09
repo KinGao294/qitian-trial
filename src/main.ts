@@ -96,10 +96,10 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  model.scale.setScalar(scale);
  box.setFromObject(model);
  model.position.y-=box.min.y;
- // Face +Z gameplay forward after root yaw.
- model.rotation.y=file==='player'?Math.PI:0;
+ // Tripo characters use +Z as their forward axis. Keep the gameplay root's
+ // yaw convention consistent with locomotion (sin(yaw), cos(yaw)).
+ model.rotation.y=0;
  const visual=root.userData.visual as T.Group;
- if(file==='boss') model.traverse(o=>{if(o instanceof T.Mesh){for(const m of (Array.isArray(o.material)?o.material:[o.material])) if(m instanceof T.MeshStandardMaterial){m.emissive=new T.Color('#ff6b32');m.emissiveIntensity=Math.max(m.emissiveIntensity||0,0.22);}}});
  visual.add(model);
  const legL=model.getObjectByName('Leg_L')||new T.Object3D();
  const legR=model.getObjectByName('Leg_R')||new T.Object3D();
@@ -114,7 +114,7 @@ manager.onError=(url)=>{el('description').textContent=`美术资源加载失败�
 Promise.all([loadCharacter(player,'player',1.9),loadCharacter(enemies[0].mesh,'boss',4.2)]).then(()=>{
  artReady=true;startButton.disabled=false;startButton.textContent='踏 入 山 门　→';
 }).catch((err)=>{ console.error(err); artReady=true; startButton.disabled=false; startButton.textContent='踏 入 山 门　→'; showError(err); });
-const keys=new Set<string>();let touchMoveX=0,touchMoveY=0;let running=false,started=false,ended=false,paused=false,hp=100,stamina=100,yaw=0,pitch=.35,vy=0,grounded=true,attackT=0,combo=0,queued=false,lastAttack=-10,dodgeT=0,invulnerable=0,kills=0,time=0,hurt=0,noticeT=0,ultT=0,ultCd=0,ultHit=false;const hitSet=new Set<Enemy>();const velocity=new T.Vector3();player.rotation.y=Math.PI;let shake=0;let muted=false,audioCtx:AudioContext|undefined;
+const keys=new Set<string>();let touchMoveX=0,touchMoveY=0;let running=false,started=false,ended=false,paused=false,hp=100,stamina=100,yaw=0,pitch=.35,vy=0,grounded=true,attackT=0,combo=0,queued=false,lastAttack=-10,dodgeT=0,invulnerable=0,kills=0,time=0,hurt=0,noticeT=0,ultT=0,ultCd=0,ultHit=false;const hitSet=new Set<Enemy>();const velocity=new T.Vector3();player.rotation.y=0;let shake=0;let muted=false,audioCtx:AudioContext|undefined;
 function sound(freq:number,duration=.12,type:OscillatorType='sine',volume=.055){if(muted)return;try{audioCtx??=new AudioContext();const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();osc.type=type;osc.frequency.setValueAtTime(freq,audioCtx.currentTime);osc.frequency.exponentialRampToValueAtTime(Math.max(25,freq*.35),audioCtx.currentTime+duration);gain.gain.setValueAtTime(volume,audioCtx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+duration);osc.connect(gain).connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime+duration);}catch{}}
 function notice(text:string){if(el('notice')) el('notice')!.textContent=text;noticeT=2;}
 function startAttack(){if(!running||dodgeT>0||ultT>0)return;if(attackT>0){queued=true;return;}combo=time-lastAttack<.85?(combo+1)%3:0;attackT=combo===2?.62:.48;lastAttack=time;hitSet.clear();sound(210+combo*90,.16+(combo*.04),'triangle',.06+combo*.01);notice(`行者 · ${MOVE_NAMES[combo]}`);staffSlashTrail(player.position,player.rotation.y,combo);}
@@ -142,7 +142,7 @@ window.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown'].include
 renderer.domElement.addEventListener('mousedown',e=>{if(e.button===0&&running){if(document.pointerLockElement!==renderer.domElement)renderer.domElement.requestPointerLock();startAttack();}});window.addEventListener('mousemove',e=>{if(document.pointerLockElement===renderer.domElement&&running){yaw-=e.movementX*.0025;pitch=T.MathUtils.clamp(pitch+e.movementY*.002,.05,.85);}});document.addEventListener('pointerlockchange',()=>{if(!coarse&&!document.pointerLockElement&&running)pause();});
 el('sound').onclick=()=>{muted=!muted;el('sound').textContent=`声音 · ${muted?'关':'开'}`;};
 function pause(){paused=true;running=false;keys.clear();el('overlay').classList.remove('hidden');el('title').textContent='暂歇片刻';el('subtitle').textContent='山 风 未 止';el('description').innerHTML='旅途仍在继续。<br>调整呼吸，再赴试炼。';el('start').textContent='继 续 试 炼　→';if(document.pointerLockElement)document.exitPointerLock();}
-function reset(){hp=100;stamina=100;kills=0;vy=0;attackT=0;queued=false;combo=0;lastAttack=-10;dodgeT=0;invulnerable=0;ultT=0;ultCd=0;ultHit=false;grounded=true;hurt=0;keys.clear();player.position.set(0,0,12);player.rotation.set(0,Math.PI,0);yaw=0;pitch=.35;for(const e of enemies){e.hp=e.max;e.dead=false;e.mesh.visible=true;e.mesh.position.copy(e.home);e.mesh.rotation.set(0,0,0);e.cool=1.5;e.wind=0;e.fireT=0;e.pattern=0;}for(const d of drops)scene.remove(d);drops.length=0;ended=false;}
+function reset(){hp=100;stamina=100;kills=0;vy=0;attackT=0;queued=false;combo=0;lastAttack=-10;dodgeT=0;invulnerable=0;ultT=0;ultCd=0;ultHit=false;grounded=true;hurt=0;keys.clear();player.position.set(0,0,12);player.rotation.set(0,0,0);yaw=0;pitch=.35;for(const e of enemies){e.hp=e.max;e.dead=false;e.mesh.visible=true;e.mesh.position.copy(e.home);e.mesh.rotation.set(0,0,0);e.cool=1.5;e.wind=0;e.fireT=0;e.pattern=0;}for(const d of drops)scene.remove(d);drops.length=0;ended=false;}
 el('start')?.addEventListener('click',()=>{if(!artReady)return;if(ended)reset();started=true;paused=false;running=true;el('overlay').classList.add('hidden');if(!coarse)renderer.domElement.requestPointerLock();sound(330,.25);notice('苍岚古寺 · 挑战镇山巨兽');});
 function finish(win:boolean){ended=true;running=false;el('title').textContent=win?'试炼已成':'再起一程';el('subtitle').textContent=win?'一 棍 破 迷 障':'胜 负 仍 未 定';el('description').innerHTML=win?'石狮封印已破，古寺重归寂静。<br>你的长棍，已留下新的传说。':`已击破 ${kills} / 1 名守卫。<br>敌人蓄力时会亮起红环，闪避可避开伤害。<br>击败守卫后拾取金色灵息，恢复生命。`;el('start').textContent='再 入 山 门　↻';el('overlay').classList.remove('hidden');document.exitPointerLock();}
 type Fx={mesh:T.Mesh,life:number,max:number,grow?:number,vy?:number,vx?:number,vz?:number};
