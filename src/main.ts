@@ -112,10 +112,12 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  root.userData.torso=torso;
  root.userData.model=model;
  groundOrient(orient);
+ // Safety lift keeps the restored upright mesh clear of the courtyard floor.
+ if (orient.position.y < 0.08) orient.position.y += 0.08;
 }
 manager.onError=(url)=>{el('description').textContent=`美术资源加载失败，请刷新重试：${url}`;};
-function attachStaff(root:T.Group){ const parent=root.userData.pivot as T.Group; const g=new T.Group(); g.name='DinghaiStaff'; cyl(.055,.07,2.5,black,0,0,0,g,12).rotation.z=Math.PI/2; cyl(.11,.04,.22,gold,1.28,0,0,g,10).rotation.z=Math.PI/2; g.rotation.set(0,0,Math.PI/2); g.position.set(.35,1.05,0); parent.add(g); console.info('[trial] staff parent',parent.name); }
-async function loadLoco(){ try { const g=await gltfLoader.loadAsync(assetUrl('models/player-loco.glb')); const model=g.scene; model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;}}); const b=new T.Box3().setFromObject(model), sz=b.getSize(new T.Vector3()); model.scale.setScalar(1.9/Math.max(sz.y,.001)); b.setFromObject(model); model.position.y-=b.min.y; const orient=player.userData.orient as T.Group; orient.clear(); orient.add(model); player.userData.model=model; orient.rotation.set(0,-Math.PI/2,0); groundOrient(orient); console.info('[trial] mixer disabled: Tripo retarget clips fold head'); mixerActive=false; } catch(e){ console.warn('[trial] loco unavailable, using player.glb',e); } }
+function attachStaff(root:T.Group){ const visual=root.userData.visual as T.Group; const parent=(visual.getObjectByName('WeaponPivot') as T.Group)||new T.Group(); parent.name='WeaponPivot'; if(!parent.parent) visual.add(parent); const g=new T.Group(); g.name='DinghaiStaff'; cyl(.055,.07,2.5,black,0,0,0,g,12); cyl(.11,.04,.22,gold,0,1.28,0,g,10); g.position.set(.45,1.1,.15); parent.add(g); console.info('[trial] staff parent',parent.name,'local position',g.position.toArray()); }
+async function loadLoco(){ mixerActive=false; console.info('[trial] loadLoco no-op: skipping bad player-loco.glb bind pose; using upright player.glb'); return; }
 Promise.all([loadCharacter(player,'player',1.9),loadCharacter(enemies[0].mesh,'boss',4.2)]).then(async()=>{ await loadLoco(); attachStaff(player);
  artReady=true;startButton.disabled=false;startButton.textContent='踏 入 山 门　→';
 }).catch((err)=>{ console.error(err); artReady=true; startButton.disabled=false; startButton.textContent='踏 入 山 门　→'; showError(err); });
