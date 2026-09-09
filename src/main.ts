@@ -3,9 +3,9 @@ import './style.css';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
-app.innerHTML = `<div id="hud"><div class="top"><div class="brand">齐天试炼<small>THE PILGRIM · TRIAL OF EMBERS</small></div><div class="chapter">第一章 · 苍岚古寺<strong>山门余烬</strong><div class="line"></div><div style="margin-top:12px;font-size:10px">踏破迷障 · 棍定山河</div></div></div><div class="reticle"></div><div class="notice" id="notice"></div><div class="status"><label>行 者 <span id="hpText">100 / 100</span></label><div class="bar"><i id="hp"></i></div><div class="bar stamina"><i id="stamina"></i></div></div><div class="objective">击败镇山巨兽<br><span id="count">0</span> / 1<div style="color:#989f90;font-size:10px">红环踏地 / 橙锥喷火 · 闪避反击</div></div><div class="controls"><span><b>W A S D</b>移动</span><span><b>鼠标</b>视角</span><span><b>J / 左键</b>三段棍术</span><span><b>K</b>定海大招</span><span><b>空格</b>跳跃</span><span class="optional"><b>SHIFT</b>闪避</span><span class="optional"><b>ESC</b>暂停</span><button class="sound" id="sound">声音 · 开</button></div></div><div id="hurt"></div><div class="overlay" id="overlay"><div class="panel"><div class="eyebrow">AN ORIGINAL 3D ACTION EXPERIENCE</div><h1 id="title">齐天试炼</h1><div class="subtitle" id="subtitle">山 门 余 烬 <span class="seal">壹</span></div><p id="description">暮钟已寂，山寺犹燃。<br>执一根长棍，穿过苍岚与残垣。<br>挑战镇山巨兽，破除古寺封印。</p><button class="button" id="start">踏 入 山 门　→</button><div class="fine">WASD 移动 · 鼠标转向 · 连按 J：横扫破风 → 挑棍穿云 → 旋砸定山 · K 定海金光 · 巨兽会喷火 · Shift 闪避<br><br>Tripo 写实模型 + 原创场景 / 建议使用键盘与鼠标</div></div></div>`;
+app.innerHTML = `<div id="hud"><div class="top"><div class="brand">齐天试炼<small>THE PILGRIM · TRIAL OF EMBERS</small></div><div class="chapter">第一章 · 苍岚古寺<strong>山门余烬</strong><div class="line"></div><div style="margin-top:12px;font-size:10px">踏破迷障 · 棍定山河</div></div></div><div class="reticle"></div><div class="notice" id="notice"></div><div class="status"><label>行 者 <span id="hpText">100 / 100</span></label><div class="bar"><i id="hp"></i></div><div class="bar stamina"><i id="stamina"></i></div><div class="ult" id="ult">K 定海神针 · 就绪</div></div><div class="objective">击败镇山巨兽<br><span id="count">0</span> / 1<div style="color:#989f90;font-size:10px">红环踏地 / 橙锥喷火 · 闪避反击</div></div><div class="controls"><span><b>W A S D</b>移动</span><span><b>鼠标</b>视角</span><span><b>J / 左键</b>三段棍术</span><span><b>K</b>定海大招</span><span><b>空格</b>跳跃</span><span class="optional"><b>SHIFT</b>闪避</span><span class="optional"><b>ESC</b>暂停</span><button class="sound" id="sound">声音 · 开</button></div></div><div id="hurt"></div><div class="overlay" id="overlay"><div class="panel"><div class="eyebrow">AN ORIGINAL 3D ACTION EXPERIENCE</div><h1 id="title">齐天试炼</h1><div class="subtitle" id="subtitle">山 门 余 烬 <span class="seal">壹</span></div><p id="description">暮钟已寂，山寺犹燃。<br>执一根长棍，穿过苍岚与残垣。<br>挑战镇山巨兽，破除古寺封印。</p><button class="button" id="start">踏 入 山 门　→</button><div class="fine">WASD 移动 · 鼠标转向 · 连按 J：横扫破风 → 挑棍穿云 → 旋砸定山 · K 定海金光 · 巨兽会喷火 · Shift 闪避<br><br>Tripo 写实模型 + 原创场景 / 建议使用键盘与鼠标</div></div></div>`;
 const el = (id:string) => document.getElementById(id)!;
-const scene = new T.Scene(); scene.background = new T.Color('#696e70'); scene.fog = new T.FogExp2('#696e70', .013);
+const scene = new T.Scene(); scene.background = new T.Color('#596466'); scene.fog = new T.FogExp2('#596466', .018);
 const renderer = new T.WebGLRenderer({antialias:true}); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,1.7)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=T.PCFSoftShadowMap; renderer.toneMapping=T.ACESFilmicToneMapping; renderer.toneMappingExposure=1.12; app.prepend(renderer.domElement);
 const camera=new T.PerspectiveCamera(55,innerWidth/innerHeight,.1,160);
 scene.add(new T.HemisphereLight('#c8e1d7','#393326',2));
@@ -89,6 +89,7 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  // Face +Z gameplay forward after root yaw.
  model.rotation.y=file==='player'?Math.PI:0;
  const visual=root.userData.visual as T.Group;
+ if(file==='boss') model.traverse(o=>{if(o instanceof T.Mesh){for(const m of (Array.isArray(o.material)?o.material:[o.material])) if(m instanceof T.MeshStandardMaterial){m.emissive=new T.Color('#ff6b32');m.emissiveIntensity=Math.max(m.emissiveIntensity||0,0.22);}}});
  visual.add(model);
  const legL=model.getObjectByName('Leg_L')||new T.Object3D();
  const legR=model.getObjectByName('Leg_R')||new T.Object3D();
@@ -103,14 +104,14 @@ manager.onError=(url)=>{el('description').textContent=`美术资源加载失败�
 Promise.all([loadCharacter(player,'player',1.9),loadCharacter(enemies[0].mesh,'boss',4.2)]).then(()=>{
  artReady=true;startButton.disabled=false;startButton.textContent='踏 入 山 门　→';
 }).catch((err)=>{console.error(err);startButton.textContent='模型载入失败 · 请刷新';});
-const keys=new Set<string>();let running=false,started=false,ended=false,paused=false,hp=100,stamina=100,yaw=0,pitch=.35,vy=0,grounded=true,attackT=0,combo=0,queued=false,lastAttack=-10,dodgeT=0,invulnerable=0,kills=0,time=0,hurt=0,noticeT=0,ultT=0,ultCd=0,ultHit=false;const hitSet=new Set<Enemy>();const velocity=new T.Vector3();player.rotation.y=Math.PI;let muted=false,audioCtx:AudioContext|undefined;
+const keys=new Set<string>();let running=false,started=false,ended=false,paused=false,hp=100,stamina=100,yaw=0,pitch=.35,vy=0,grounded=true,attackT=0,combo=0,queued=false,lastAttack=-10,dodgeT=0,invulnerable=0,kills=0,time=0,hurt=0,noticeT=0,ultT=0,ultCd=0,ultHit=false;const hitSet=new Set<Enemy>();const velocity=new T.Vector3();player.rotation.y=Math.PI;let shake=0;let muted=false,audioCtx:AudioContext|undefined;
 function sound(freq:number,duration=.12,type:OscillatorType='sine',volume=.055){if(muted)return;try{audioCtx??=new AudioContext();const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();osc.type=type;osc.frequency.setValueAtTime(freq,audioCtx.currentTime);osc.frequency.exponentialRampToValueAtTime(Math.max(25,freq*.35),audioCtx.currentTime+duration);gain.gain.setValueAtTime(volume,audioCtx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+duration);osc.connect(gain).connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime+duration);}catch{}}
 function notice(text:string){el('notice').textContent=text;noticeT=2;}
 function startAttack(){if(!running||dodgeT>0||ultT>0)return;if(attackT>0){queued=true;return;}combo=time-lastAttack<.85?(combo+1)%3:0;attackT=combo===2?.62:.48;lastAttack=time;hitSet.clear();sound(210+combo*90,.16+(combo*.04),'triangle',.06+combo*.01);notice(`行者 · ${MOVE_NAMES[combo]}`);staffSlashTrail(player.position,player.rotation.y,combo);}
 function startUltimate(){
  if(!running||dodgeT>0||ultT>0||ultCd>0||attackT>0)return;
  if(stamina<45){notice('灵力不足 · 无法定海');return;}
- stamina-=45;ultT=.95;ultCd=7.5;ultHit=false;attackT=0;queued=false;invulnerable=.35;
+ stamina-=45;ultT=.95;ultCd=7.5;ultHit=false;shake=.28;attackT=0;queued=false;invulnerable=.35;
  notice('行者 · 定海神针');sound(90,.35,'sawtooth',.07);sound(420,.4,'triangle',.05);
  ring(player.position,'#ffe29a',2.6,.45);
 }
@@ -127,7 +128,7 @@ const effects:Fx[]=[];const drops:T.Mesh[]=[];
 function ring(pos:T.Vector3,color:string,size:number,life:number){const mesh=new T.Mesh(new T.RingGeometry(size*.85,size,40),new T.MeshBasicMaterial({color,side:T.DoubleSide,transparent:true,opacity:.85,depthWrite:false}));mesh.rotation.x=-Math.PI/2;mesh.position.copy(pos);mesh.position.y+=.12;scene.add(mesh);effects.push({mesh,life,max:life,grow:size*0.35});}
 function sparks(pos:T.Vector3,n=7,color='#ffe7a0'){for(let i=0;i<n;i++){const m=new T.MeshStandardMaterial({color,emissive:color,emissiveIntensity:2.2,roughness:0.4,metalness:0.2});const mesh=sphere(.05+rand()*.04,m,pos.x+(rand()-.5)*0.6,pos.y+.4+rand()*1.4,pos.z+(rand()-.5)*0.6,scene);effects.push({mesh,life:.28+rand()*.25,max:.5,vy:1.5+rand()*2,vx:(rand()-.5)*2,vz:(rand()-.5)*2});}}
 function beam(origin:T.Vector3,dir:T.Vector3,length:number,color:string,life=.35,radius=.08){
- const geom=new T.CylinderGeometry(radius,radius*0.35,length,8,1,true);
+ const geom=new T.CylinderGeometry(radius*1.35,radius*0.5,length,8,1,true);
  const mat=new T.MeshBasicMaterial({color,transparent:true,opacity:.85,depthWrite:false,blending:T.AdditiveBlending});
  const mesh=new T.Mesh(geom,mat);
  const mid=origin.clone().add(dir.clone().multiplyScalar(length*0.5));
@@ -136,7 +137,7 @@ function beam(origin:T.Vector3,dir:T.Vector3,length:number,color:string,life=.35
  scene.add(mesh);effects.push({mesh,life,max:life});
 }
 function fireCone(origin:T.Vector3,yaw:number,life=.55){
- const geom=new T.ConeGeometry(1.8,6.5,18,1,true);
+ const geom=new T.ConeGeometry(2.15,7.2,18,1,true);
  const mat=new T.MeshBasicMaterial({color:'#ff6a2a',transparent:true,opacity:.72,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide});
  const mesh=new T.Mesh(geom,mat);
  const forward=new T.Vector3(Math.sin(yaw),0,Math.cos(yaw));
@@ -259,7 +260,7 @@ for(const e of enemies){
   if(e.wind<=0&&dist<(e.boss?4.2:2.3)&&Math.abs(diff.y)<2.8&&invulnerable<=0){
    hp=Math.max(0,hp-(e.boss?28:11));hurt=.75;invulnerable=.55;sound(e.boss?38:60,.28,'sawtooth',.06);
    ring(player.position,'#c94b30',e.boss?1.8:1,.35);
-   if(e.boss){ring(e.mesh.position,'#ff6a3a',4.5,.4);sparks(player.position,10,'#ff8a4a');}
+   if(e.boss){ring(e.mesh.position,'#ff6a3a',4.5,.4);sparks(player.position,10,'#ff8a4a');shake=.32;}
    if(hp<=0)finish(false);
   }
  }else if(dist<(e.boss?3.8:1.8)&&Math.abs(diff.y)<2.8&&e.cool<=0){
@@ -288,9 +289,9 @@ for(let i=drops.length-1;i>=0;i--){const d=drops[i];d.position.y=.65+Math.sin(ti
 }
 function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.033);if(running)update(dt);for(let i=effects.length-1;i>=0;i--){const e=effects[i];if(running){e.life-=dt;if(e.vx||e.vy||e.vz){e.mesh.position.x+=(e.vx||0)*dt;e.mesh.position.y+=(e.vy||0)*dt;e.mesh.position.z+=(e.vz||0)*dt;if(e.vy!==undefined)e.vy-=6*dt;}if(e.grow){const s=1+(1-Math.max(e.life,0)/e.max)*e.grow;e.mesh.scale.setScalar(s);}}const mat=e.mesh.material as T.MeshBasicMaterial|T.MeshStandardMaterial;if('opacity' in mat)mat.opacity=Math.max(0,e.life/e.max)*('emissiveIntensity' in mat?1:.95);if(e.life<=0){scene.remove(e.mesh);e.mesh.geometry.dispose();(e.mesh.material as T.Material).dispose();effects.splice(i,1);}}
 const t=performance.now()/1000;banners.forEach((b,i)=>{b.rotation.x=Math.sin(t*1.5+i)*.045;b.rotation.z=Math.sin(t+i)*.025;});flames.forEach((f,i)=>(f.material as T.MeshStandardMaterial).emissiveIntensity=1.8+Math.sin(t*5+i)*.25);
-look.copy(player.position).add(new T.Vector3(0,1.3,0));desired.copy(look).add(new T.Vector3(Math.sin(yaw)*8.2,1.7+pitch*4,Math.cos(yaw)*8.2));desired.x=T.MathUtils.clamp(desired.x,-22,22);desired.z=T.MathUtils.clamp(desired.z,-22,24);camera.position.lerp(desired,1-Math.exp(-dt*8));camera.lookAt(look);
+shake=Math.max(0,shake-dt*1.8); look.copy(player.position).add(new T.Vector3(0,1.3,0));desired.copy(look).add(new T.Vector3(Math.sin(yaw)*8.2,1.7+pitch*4,Math.cos(yaw)*8.2));desired.x=T.MathUtils.clamp(desired.x,-22,22);desired.z=T.MathUtils.clamp(desired.z,-22,24);camera.position.lerp(desired,1-Math.exp(-dt*8)); if(shake>0) camera.position.add(new T.Vector3((Math.random()-.5)*shake,(Math.random()-.5)*shake*.6,(Math.random()-.5)*shake)); camera.lookAt(look);
 for(const e of enemies){project.copy(e.mesh.position);project.y+=e.boss?5.2:2.8;project.project(camera);e.label.style.display=started&&!e.dead&&project.z<1&&project.z>0?'block':'none';e.label.style.left=`${(project.x*.5+.5)*innerWidth}px`;e.label.style.top=`${(-project.y*.5+.5)*innerHeight}px`;e.label.querySelector('i')!.style.width=`${Math.max(0,e.hp/e.max*100)}%`;}
-el('hp').style.width=`${hp}%`;el('hpText').textContent=`${hp} / 100`;el('stamina').style.width=`${stamina}%`;el('count').textContent=String(kills);hurt=Math.max(0,hurt-dt);el('hurt').style.opacity=String(hurt*.7);if(running)noticeT=Math.max(0,noticeT-dt);el('notice').style.opacity=noticeT>0?'1':'0';renderer.render(scene,camera);}
+el('hp').style.width=`${hp}%`;el('hpText').textContent=`${hp} / 100`;el('stamina').style.width=`${stamina}%`;el('count').textContent=String(kills);el('ult').textContent=ultCd>0?`K 定海神针 · ${ultCd.toFixed(1)}s`:'K 定海神针 · 就绪';hurt=Math.max(0,hurt-dt);el('hurt').style.opacity=String(hurt*.7);if(running)noticeT=Math.max(0,noticeT-dt);el('notice').style.opacity=noticeT>0?'1':'0';renderer.render(scene,camera);}
 camera.position.set(0,5.7,20);frame();window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 // Read-only snapshot for browser smoke tests and diagnostics.
 Object.defineProperty(window,'__trial',{get:()=>({running,artReady,hp,kills,grounded,yaw,player:player.position.toArray(),enemies:enemies.map(e=>({hp:e.hp,dead:e.dead,position:e.mesh.position.toArray()}))})});
