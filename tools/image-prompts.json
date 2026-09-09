@@ -1,0 +1,17 @@
+{
+  "mode": "Built-in image_gen",
+  "prompts": {
+    "sky_dusk": "Use case: stylized-concept. Asset type: game sky background texture, square 1024. Mythical Chinese mountain mist at dusk, distant layered jagged mountains low on horizon, expansive muted amber and slate teal cloud sky, painterly cinematic atmosphere. No foreground objects, text, logos or watermark. Original environment.",
+    "stone_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Top down orthographic Chinese temple stone pavement, large weathered charcoal gray stone slabs, subtle warm mineral variation, worn edges and fine cracks, restrained moss in joints. Flat diffuse lighting, no perspective, no cast shadows, no text, logos or watermark. Tileable edges.",
+    "wood_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Dark lacquered Chinese temple timber, deep brown almost black wood with fine vertical grain, worn warm reddish edges and subtle aged lacquer patina. Flat diffuse lighting, full frame material, no objects, perspective, shadows, text, logos or watermark. Tileable.",
+    "cloth_red": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Deep vermilion red ritual cloth fabric, fine woven silk fibers, subtle faded gold cloud pattern woven sparsely into textile, softly aged. Flat unlit surface, no folds or shadows, no text logos or watermark. Tileable edges.",
+    "boss_diffuse": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture for original stone temple lion guardian. Weathered jade gray carved stone material, subtle mineral mottling, hairline cracks with muted antique gold veins, small traces of moss, sculptural hand painted fantasy game surface. Flat diffuse lighting, no face, no complete creature, no shadows, text logos or watermark. Tileable, original no existing game assets."
+  },
+  "sources": {
+    "sky_dusk": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-2b275781-560b-4062-91cb-15bf58377a3a.png",
+    "stone_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-dc7bbd0f-4ea2-4448-a5ea-c2b477310ee4.png",
+    "wood_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-482d2ab2-0f69-409c-8121-d5c7d66a0434.png",
+    "cloth_red": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-440abd77-89fe-41e9-bacb-93eeffe40e70.png",
+    "boss_diffuse": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-1a00a5a4-bf64-40e8-8533-528219a0da90.png"
+  }
+}

@@ -1,45 +1,49 @@
-在线试玩：https://kingao294.github.io/qitian-trial/
-
 # 齐天试炼 · 山门余烬
 
-原创第三人称 3D 动作游戏垂直切片，使用 Vite、TypeScript、Three.js。古寺庭院、猴行者、长棍、石魇、金刚、灯笼与山景均由代码生成；音效使用 Web Audio 合成，无任何游戏提取素材。
+Vite + TypeScript + Three.js 原创第三人称动作游戏。单关古寺庭院，击败唯一的镇庭石狮即通关；生命耗尽可重开。
 
 ## 运行
 
 ```sh
 npm install
 npm run dev
-```
-
-打开终端显示的地址（默认 http://localhost:5173）。需要支持 WebGL 的桌面浏览器与键盘鼠标。
-
-```sh
 npm run build
-npm run preview
 ```
 
-## 操作
+打开终端中的 `/qitian-trial/` 地址。需要支持 WebGL 的桌面浏览器。
 
-- 点击「踏入山门」开始并锁定鼠标；鼠标控制跟随镜头。
-- WASD：相对镜头移动；空格：跳跃，可跳上庭院两侧石台。
-- 左键 / J：棍术攻击，连按衔接三段连击；第三段伤害更高，近敌自动辅助转向。
-- Shift：消耗精力闪避，短暂无敌；精力自动恢复。
-- Esc：暂停并释放鼠标；点击继续回到游戏。
-- 右下角声音按钮可在释放鼠标后切换合成音效。
+WASD 移动，鼠标转向，空格跳跃，J / 左键三段棍术，Shift 闪避，Esc 暂停。红色预警环表示 Boss 正在蓄力，利用闪避无敌时间反击。第三段攻击伤害更高。
 
-击败六名石魇与一名镇庭金刚即可通关；生命耗尽失败，可重新挑战。敌人攻击前脚下出现红色预警环，及时闪避。击败敌人掉落金色灵息，靠近恢复 18 点生命。
+## Image + Blender 美术管线
 
-入口：`index.html`、`src/main.ts`。游戏无需外部图片、模型或字体，全部使用程序化资源与系统字体。
+五张贴图使用 Codex 内置 **image_gen** 生成，转换为 1024×1024 JPEG，保存在 `public/textures/`：
 
-## 浏览器实测
+- `sky_dusk.jpg`：中国神话山峦、薄雾与暮色天空，作为背景及低强度环境光。
+- `stone_albedo.jpg`：风化古寺石板，用于庭院、石墙和石台。
+- `wood_albedo.jpg`：深色旧漆木纹，用于梁柱、长棍和斗笠。
+- `cloth_red.jpg`：暗红织物与淡金云纹，用于旗幡和行者衣袍。
+- `boss_diffuse.jpg`：灰绿风化石材、细裂纹、金色矿脉，用于石狮。
 
-已使用 Chromium / Playwright 以真实键盘输入验证：开始、跳跃落地、棍术击杀全部 7 名敌人并通关、重开重置、敌人攻击扣血；无浏览器脚本异常。截图保存在 `tests/`。
+完整最终提示词和生成来源记录在 `tools/image-prompts.json`。使用内置工具路径，没有调用 API CLI；工具没有提供可选择或验证的“2.5”版本参数，因此不宣称使用了特定 2.5 模型。素材为原创生成，没有游戏提取资产或品牌标志。
 
-复跑（先启动 `npm run dev`）：
+`tools/build_models.py` 使用 Blender 建模并导出包含纹理的 GLB：
 
 ```sh
+/home/box/bin/blender -b --python tools/build_models.py
+# 或 blender -b --python tools/build_models.py
+```
+
+- `public/models/player.glb`：猴行者、斗笠、分层红袍、卷尾、铜饰长棍，约 8,132 三角面。
+- `public/models/boss.glb`：石狮、卷曲鬃毛、獠牙、发光眼睛、仪式胸饰，约 23,258 三角面。
+
+模型使用静态网格及命名的腿、躯干、武器子节点，由现有战斗代码驱动简单动画，无骨骼蒙皮。GLTFLoader 加载后启用开始按钮；所有路径兼容 Vite 部署子目录。现有庭院结构保留并应用生成贴图。
+
+## 验证
+
+```sh
+# 先运行 npm run dev
 npx playwright install chromium
 node tests/smoke.mjs
 ```
 
-软件 WebGL 环境运行完整战斗测试可能需要数分钟。
+浏览器测试通过真实键盘输入验证模型加载、跳跃、攻击击杀 Boss、胜利、重开以及敌人伤害，截图保存在 `tests/`。

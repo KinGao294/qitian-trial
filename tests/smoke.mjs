@@ -2,7 +2,7 @@ import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
 const browser=await chromium.launch({headless:true,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 const page=await browser.newPage({viewport:{width:800,height:600}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
-await page.goto('http://localhost:5173');await page.waitForTimeout(1500);await page.screenshot({path:'tests/title.png'});await page.click('#start');await page.waitForTimeout(500);
+await page.goto('http://localhost:5173/qitian-trial/');await page.waitForFunction(()=>window.__trial?.artReady);await page.screenshot({path:'tests/title.png'});await page.click('#start');await page.waitForTimeout(500);
 const snap=()=>page.evaluate(()=>window.__trial);
 assert.equal((await snap()).running,true);
 await page.keyboard.press('Space');await page.waitForTimeout(200);assert.ok((await snap()).player[1]>.2,'jump rises');await page.waitForFunction(()=>window.__trial.grounded,{},{timeout:15000});assert.equal((await snap()).grounded,true);
@@ -17,6 +17,6 @@ for(let i=0;i<500;i++){
  await page.keyboard.press('KeyJ');await page.waitForTimeout(120);
 }
 for(const k of ['KeyW','KeyA','KeyS','KeyD'])await page.keyboard.up(k);
-const final=await snap();console.log('Combat result',final);assert.equal(final.kills,7,'clear all enemies through actual attacks');await page.screenshot({path:'tests/victory.png'});await page.click('#start');await page.waitForTimeout(200);assert.equal((await snap()).kills,0);assert.equal((await snap()).hp,100);
+const final=await snap();console.log('Combat result',final);assert.equal(final.kills,1,'defeat boss through actual attacks');await page.screenshot({path:'tests/victory.png'});await page.click('#start');await page.waitForTimeout(200);assert.equal((await snap()).kills,0);assert.equal((await snap()).hp,100);
 // Stand in range to verify damage and defeat.
-await page.keyboard.down('KeyW');await page.waitForTimeout(1200);await page.keyboard.up('KeyW');await page.waitForTimeout(22000);const loss=await snap();console.log('Damage result',loss.hp);assert.ok(loss.hp<100);assert.deepEqual(errors,[]);await browser.close();
+await page.keyboard.down('KeyW');await page.waitForTimeout(2400);await page.keyboard.up('KeyW');await page.waitForTimeout(22000);const loss=await snap();console.log('Damage result',loss.hp);assert.ok(loss.hp<100);assert.deepEqual(errors,[]);await browser.close();

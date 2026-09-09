@@ -442,3 +442,966 @@ If installation is not possible in this environment, tell the user which depende
 - `references/codex-network.md`: fallback-only network/sandbox troubleshooting for CLI mode.
 - `scripts/image_gen.py`: fallback-only CLI implementation. Use only when the user explicitly chooses or confirms CLI mode.
 
+exec
+/bin/bash -lc 'cat src/main.ts' in /workspace/wukong-3d
+ succeeded in 0ms:
+import * as T from 'three';
+import './style.css';
+
+const app = document.querySelector<HTMLDivElement>('#app')!;
+app.innerHTML = `<div id="hud"><div class="top"><div class="brand">齐天试炼<small>THE PILGRIM · TRIAL OF EMBERS</small></div><div class="chapter">第一章 · 苍岚古寺<strong>山门余烬</strong><div class="line"></div><div style="margin-top:12px;font-size:10px">踏破迷障 · 棍定山河</div></div></div><div class="reticle"></div><div class="notice" id="notice"></div><div class="status"><label>行 者 <span id="hpText">100 / 100</span></label><div class="bar"><i id="hp"></i></div><div class="bar stamina"><i id="stamina"></i></div></div><div class="objective">肃清古寺守卫<br><span id="count">0</span> / 7<div style="color:#989f90;font-size:10px">金色灵息可恢复生命</div></div><div class="controls"><span><b>W A S D</b>移动</span><span><b>鼠标</b>视角</span><span><b>J / 左键</b>棍术</span><span><b>空格</b>跳跃</span><span class="optional"><b>SHIFT</b>闪避</span><span class="optional"><b>ESC</b>暂停</span><button class="sound" id="sound">声音 · 开</button></div></div><div id="hurt"></div><div class="overlay" id="overlay"><div class="panel"><div class="eyebrow">AN ORIGINAL 3D ACTION EXPERIENCE</div><h1 id="title">齐天试炼</h1><div class="subtitle" id="subtitle">山 门 余 烬 <span class="seal">壹</span></div><p id="description">暮钟已寂，山寺犹燃。<br>执一根长棍，穿过苍岚与残垣。<br>击破六名石魇守卫，挑战镇庭金刚。</p><button class="button" id="start">踏 入 山 门　→</button><div class="fine">WASD 移动 · 鼠标转向 · 连按 J 三段棍术 · Shift 闪避<br><br>原创程序化场景 / 建议使用键盘与鼠标</div></div></div>`;
+const el = (id:string) => document.getElementById(id)!;
+const scene = new T.Scene(); scene.background = new T.Color('#82938c'); scene.fog = new T.FogExp2('#82938c', .024);
+const renderer = new T.WebGLRenderer({antialias:true}); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,1.7)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=T.PCFSoftShadowMap; renderer.toneMapping=T.ACESFilmicToneMapping; renderer.toneMappingExposure=1.12; app.prepend(renderer.domElement);
+const camera=new T.PerspectiveCamera(55,innerWidth/innerHeight,.1,160);
+scene.add(new T.HemisphereLight('#c8e1d7','#393326',2));
+const sun=new T.DirectionalLight('#ffe0aa',3.1);sun.position.set(-16,30,12);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-30,right:30,top:30,bottom:-30,near:1,far:80});sun.shadow.bias=-.0005;scene.add(sun);
+const mat=(c:string,metal=0,rough=.9)=>new T.MeshStandardMaterial({color:c,metalness:metal,roughness:rough});
+const stone=mat('#727e78'),darkStone=mat('#46534f'),edgeStone=mat('#90978b'),wood=mat('#452c24'),red=mat('#803d2e'),gold=mat('#b69753',.65,.4),roof=mat('#354a46'),fur=mat('#775136'),skin=mat('#be9363'),cloth=mat('#a4402a'),black=mat('#272e2b');
+function box(w:number,h:number,d:number,m:T.Material,x=0,y=0,z=0,parent:T.Object3D=scene){const o=new T.Mesh(new T.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;parent.add(o);return o;}
+function sphere(r:number,m:T.Material,x:number,y:number,z:number,parent:T.Object3D){const o=new T.Mesh(new T.SphereGeometry(r,10,8),m);o.position.set(x,y,z);o.castShadow=true;parent.add(o);return o;}
+function cyl(r:number,rt:number,h:number,m:T.Material,x:number,y:number,z:number,parent:T.Object3D=scene,n=10){const o=new T.Mesh(new T.CylinderGeometry(r,rt,h,n),m);o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;parent.add(o);return o;}
+let seed=72;function rand(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}
+const solids:{x:number,z:number,w:number,d:number,h:number}[]=[];
+function platform(x:number,z:number,w:number,d:number,h:number){box(w,h,d,darkStone,x,h/2,z);box(w+.12,.14,d+.12,edgeStone,x,h+.07,z);solids.push({x,z,w,d,h:h+.14});}
+box(110,.5,110,darkStone,0,-.4,0);
+const paving=new T.InstancedMesh(new T.BoxGeometry(1.91,.16,1.91),mat('#ffffff'),529);paving.receiveShadow=true;const tileMatrix=new T.Matrix4();let tile=0;
+for(let x=-11;x<=11;x++)for(let z=-11;z<=11;z++){tileMatrix.makeTranslation(x*2,-.06+rand()*.035,z*2);paving.setMatrixAt(tile,tileMatrix);paving.setColorAt(tile,new T.Color().setHSL(.13+rand()*.025,.045,.32+rand()*.12));tile++;}scene.add(paving);
+// Courtyard walls, stair landings, and a temple made entirely from original geometry.
+platform(-13,-3,5,7,.8);platform(-16,-8,4,4,1.65);platform(-12,-12,5,4,2.45);platform(13,-5,5,6,1);platform(16,-10,4,4,1.9);
+for(let i=0;i<4;i++)platform(0,-14-i*.9,13,.9,.23*(i+1));platform(0,-19,17,6,1.05);
+for(const side of [-1,1]){box(.85,3.4,44,stone,side*23,1.7,0);box(1.25,.3,44,roof,side*23,3.5,0);for(let z=-20;z<=20;z+=5){box(1.4,4,1.4,darkStone,side*23,2,z);box(1.9,.3,1.9,roof,side*23,4,z);}box(14,3,1,stone,side*15,1.5,-23);}
+function temple(x:number,z:number,scale=1){const g=new T.Group();g.position.set(x,1.15,z);g.scale.setScalar(scale);scene.add(g);box(14,.4,6,stone,0,0,0,g);for(const xx of [-6,-2,2,6])for(const zz of [-2,2]){cyl(.25,.32,5,wood,xx,2.5,zz,g);cyl(.37,.37,.3,gold,xx,.4,zz,g);}box(13,4,.35,wood,0,2,-2.25,g);for(let xx=-5;xx<=5;xx+=2){box(.12,3.2,.2,gold,xx,2,-1.98,g);}box(14,.4,5.9,red,0,4.7,0,g);for(let j=0;j<6;j++){const width=17-j*.95,dep=8-j*.78;box(width,.3,dep,roof,0,5+j*.32,0,g);}for(const s of [-1,1]){const beam=box(3,.22,.24,gold,s*7.6,5.35,3.6,g);beam.rotation.z=s*.22;}box(3.4,1,.22,black,0,4,-2,g); const plaque=document.createElement('canvas');plaque.width=512;plaque.height=160;const ctx=plaque.getContext('2d')!;ctx.fillStyle='#1e2925';ctx.fillRect(0,0,512,160);ctx.fillStyle='#c4aa68';ctx.font='80px serif';ctx.textAlign='center';ctx.fillText('苍 岚 寺',256,111);const pm=new T.MeshBasicMaterial({map:new T.CanvasTexture(plaque)});box(3.4,1,.02,pm,0,4,-1.87,g);return g;}
+temple(0,-19);temple(-32,-24,.8);temple(33,-28,.9);
+// Gateway behind the player.
+for(const x of [-7,7]){box(.8,7,.8,wood,x,3.5,20);box(1.3,.5,1.3,stone,x,.25,20);}box(16,.65,1.3,red,0,6.1,20);for(let j=0;j<4;j++)box(18-j*1.1,.28,4-j*.6,roof,0,6.6+j*.3,20);
+const flames:T.Mesh[]=[];
+function lantern(x:number,z:number){cyl(.4,.6,.3,stone,x,.15,z);cyl(.12,.18,2.5,wood,x,1.5,z);box(.9,.13,.9,roof,x,3,z);const m=new T.MeshStandardMaterial({color:'#ffc271',emissive:'#ff8b30',emissiveIntensity:2});const f=box(.56,.65,.56,m,x,2.6,z);flames.push(f);box(.8,.12,.8,black,x,2.2,z);const l=new T.PointLight('#ff9d42',8,7,2);l.position.set(x,2.6,z);scene.add(l);}
+for(const x of [-9,9])for(const z of [14,3,-10,-17])lantern(x,z);
+const banners:T.Mesh[]=[];
+for(const x of [-18,18])for(const z of [8,-13]){cyl(.08,.11,6,wood,x,3,z);box(2.3,.1,.1,gold,x+.9,5.5,z);const b=box(1.6,2.9,.06,red,x+.85,4,z);banners.push(b);box(.07,2.9,.07,gold,x+.13,4,z+.05);}
+for(let i=0;i<65;i++){const x=(rand()-.5)*90,z=(rand()-.5)*90;if(Math.abs(x)<24&&Math.abs(z)<25)continue;const h=8+rand()*22;const o=new T.Mesh(new T.ConeGeometry(4+rand()*8,h,5),mat('#596c63'));o.position.set(x,h/2-1,z);scene.add(o);}
+for(let i=0;i<40;i++){const side=i%2?1:-1;const x=side*(19+rand()*2),z=-21+rand()*40;const o=box(.3+rand()*1.4,.25+rand()*.6,.4+rand(),rand()>.4?stone:darkStone,x,.1,z);o.rotation.y=rand()*6;}
+// Twisted bare trees along the walls.
+for(const x of [-20,20])for(const z of [-15,10]){const trunk=cyl(.23,.55,7,wood,x,3.2,z);trunk.rotation.z=x>0?-.12:.12;for(let j=0;j<5;j++){const branch=cyl(.04,.17,3.4,wood,x+(j%2?1:-1),4+j*.48,z);branch.rotation.z=(j%2?1:-1)*.85;branch.rotation.x=j*.7;}}
+const motes=new T.BufferGeometry();const motePos=new Float32Array(180*3);for(let i=0;i<motePos.length;i+=3){motePos[i]=(rand()-.5)*46;motePos[i+1]=rand()*9;motePos[i+2]=(rand()-.5)*46;}motes.setAttribute('position',new T.BufferAttribute(motePos,3));scene.add(new T.Points(motes,new T.PointsMaterial({color:'#e3cf8c',size:.045,transparent:true,opacity:.65})));
+
+function warrior(enemy=false,boss=false){const g=new T.Group();const bodyMat=enemy?(boss?mat('#66664f',.35):darkStone):fur;const armor=enemy?(boss?gold:mat('#626e67',.4)):gold;const torso=box(.68,.78,.42,bodyMat,0,1.23,0,g);box(.77,.24,.48,armor,0,1.42,0,g);box(.69,.19,.48,enemy?black:cloth,0,.89,0,g);for(const s of [-1,1]){sphere(.25,armor,s*.47,1.48,0,g);box(.21,.58,.25,bodyMat,s*.48,1.12,.06,g);}sphere(.31,bodyMat,0,1.94,0,g);sphere(.23,enemy?stone:skin,0,1.9,.2,g);for(const s of [-1,1]){sphere(.12,bodyMat,s*.32,1.96,0,g);box(.09,.035,.04,enemy?mat('#ffa055'):black,s*.11,1.98,.405,g);}cyl(.33,.33,.09,armor,0,2.1,0,g);if(!enemy){const tail=new T.Mesh(new T.TorusGeometry(.39,.055,6,14,Math.PI*1.5),fur);tail.position.set(0,.78,-.42);tail.rotation.y=Math.PI/2;g.add(tail);const scarf=box(.28,.9,.06,cloth,.28,1.06,-.3,g);scarf.rotation.z=-.27;}else{for(const s of [-1,1]){const horn=cyl(0,.1,.42,armor,s*.23,2.28,0,g);horn.rotation.z=-s*.3;}}
+const legs=[box(.25,.73,.3,bodyMat,-.22,.42,0,g),box(.25,.73,.3,bodyMat,.22,.42,0,g)];for(const s of [-1,1])box(.29,.17,.44,black,s*.22,.09,.08,g);
+const pivot=new T.Group();pivot.position.set(.5,1.3,.2);g.add(pivot);const staff=cyl(.047,.047,3.3,enemy?black:wood,0,0,0,pivot);for(const s of [-1,1])cyl(.075,.075,.48,armor,0,s*1.4,0,pivot);pivot.rotation.z=-.25;g.userData={legs,pivot,torso};if(boss)g.scale.setScalar(1.65);scene.add(g);return g;}
+const player=warrior();player.position.set(0,0,12);
+type Enemy={mesh:T.Group,hp:number,max:number,boss:boolean,home:T.Vector3,cool:number,wind:number,hit:boolean,dead:boolean,label:HTMLDivElement};
+const enemies:Enemy[]=[];for(const [x,z,boss] of [[-5,6,0],[6,3,0],[-6,-3,0],[5,-7,0],[-5,-10,0],[8,-12,0],[0,-11,1]]){const mesh=warrior(true,!!boss);mesh.position.set(x,0,z);const label=document.createElement('div');label.className='enemy-label'+(boss?' boss-label':'');label.innerHTML=`${boss?'镇庭金刚':'石魇'}<i></i>`;document.body.append(label);enemies.push({mesh,hp:boss?240:80,max:boss?240:80,boss:!!boss,home:mesh.position.clone(),cool:1+rand(),wind:0,hit:false,dead:false,label});}
+const keys=new Set<string>();let running=false,started=false,ended=false,paused=false,hp=100,stamina=100,yaw=0,pitch=.35,vy=0,grounded=true,attackT=0,combo=0,queued=false,lastAttack=-10,dodgeT=0,invulnerable=0,kills=0,time=0,hurt=0,noticeT=0;const hitSet=new Set<Enemy>();const velocity=new T.Vector3();player.rotation.y=Math.PI;let muted=false,audioCtx:AudioContext|undefined;
+function sound(freq:number,duration=.12,type:OscillatorType='sine',volume=.055){if(muted)return;try{audioCtx??=new AudioContext();const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();osc.type=type;osc.frequency.setValueAtTime(freq,audioCtx.currentTime);osc.frequency.exponentialRampToValueAtTime(Math.max(25,freq*.35),audioCtx.currentTime+duration);gain.gain.setValueAtTime(volume,audioCtx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+duration);osc.connect(gain).connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime+duration);}catch{}}
+function notice(text:string){el('notice').textContent=text;noticeT=2;}
+function startAttack(){if(!running||dodgeT>0)return;if(attackT>0){queued=true;return;}combo=time-lastAttack<.85?(combo+1)%3:0;attackT=.48;lastAttack=time;hitSet.clear();sound(210+combo*80,.16,'triangle');}
+function dodge(){if(!running||stamina<30||dodgeT>0)return;stamina-=30;dodgeT=.38;invulnerable=.45;attackT=0;sound(140,.15,'sine');}
+window.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown'].includes(e.code))e.preventDefault();keys.add(e.code);if(e.repeat)return;if(e.code==='KeyJ')startAttack();if(e.code==='ShiftLeft'||e.code==='ShiftRight')dodge();if(e.code==='Space'&&grounded&&running){vy=8.4;grounded=false;sound(220,.1);}if(e.code==='Escape'&&started&&!ended){if(!paused)pause();}});window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{keys.clear();if(running)pause();});
+renderer.domElement.addEventListener('mousedown',e=>{if(e.button===0&&running){if(document.pointerLockElement!==renderer.domElement)renderer.domElement.requestPointerLock();startAttack();}});window.addEventListener('mousemove',e=>{if(document.pointerLockElement===renderer.domElement&&running){yaw-=e.movementX*.0025;pitch=T.MathUtils.clamp(pitch+e.movementY*.002,.05,.85);}});document.addEventListener('pointerlockchange',()=>{if(!document.pointerLockElement&&running)pause();});
+el('sound').onclick=()=>{muted=!muted;el('sound').textContent=`声音 · ${muted?'关':'开'}`;};
+function pause(){paused=true;running=false;keys.clear();el('overlay').classList.remove('hidden');el('title').textContent='暂歇片刻';el('subtitle').textContent='山 风 未 止';el('description').innerHTML='旅途仍在继续。<br>调整呼吸，再赴试炼。';el('start').textContent='继 续 试 炼　→';if(document.pointerLockElement)document.exitPointerLock();}
+function reset(){hp=100;stamina=100;kills=0;vy=0;attackT=0;queued=false;combo=0;lastAttack=-10;dodgeT=0;invulnerable=0;grounded=true;hurt=0;keys.clear();player.position.set(0,0,12);player.rotation.set(0,Math.PI,0);yaw=0;pitch=.35;for(const e of enemies){e.hp=e.max;e.dead=false;e.mesh.visible=true;e.mesh.position.copy(e.home);e.mesh.rotation.set(0,0,0);e.cool=1.5;e.wind=0;}for(const d of drops)scene.remove(d);drops.length=0;ended=false;}
+el('start').onclick=()=>{if(ended)reset();started=true;paused=false;running=true;el('overlay').classList.add('hidden');renderer.domElement.requestPointerLock();sound(330,.25);notice('苍岚古寺 · 肃清七名守卫');};
+function finish(win:boolean){ended=true;running=false;el('title').textContent=win?'试炼已成':'再起一程';el('subtitle').textContent=win?'一 棍 破 迷 障':'胜 负 仍 未 定';el('description').innerHTML=win?'七道魔障尽散，古寺重归寂静。<br>你的长棍，已留下新的传说。':`已击破 ${kills} / 7 名守卫。<br>敌人蓄力时会亮起红环，闪避可避开伤害。<br>击败守卫后拾取金色灵息，恢复生命。`;el('start').textContent='再 入 山 门　↻';el('overlay').classList.remove('hidden');document.exitPointerLock();}
+const effects:{mesh:T.Mesh,life:number,max:number}[]=[];const drops:T.Mesh[]=[];
+function ring(pos:T.Vector3,color:string,size:number,life:number){const mesh=new T.Mesh(new T.RingGeometry(size*.85,size,40),new T.MeshBasicMaterial({color,side:T.DoubleSide,transparent:true,opacity:.85,depthWrite:false}));mesh.rotation.x=-Math.PI/2;mesh.position.copy(pos);mesh.position.y+=.12;scene.add(mesh);effects.push({mesh,life,max:life});}
+function sparks(pos:T.Vector3){for(let i=0;i<7;i++){const mesh=sphere(.045, gold.clone(),pos.x+(rand()-.5),pos.y+.5+rand()*1.3,pos.z+(rand()-.5),scene);effects.push({mesh,life:.25+rand()*.2,max:.45});}}
+function floorAt(x:number,z:number,y:number){let floor=0;for(const s of solids)if(Math.abs(x-s.x)<s.w/2+.15&&Math.abs(z-s.z)<s.d/2+.15&&y>=s.h-.1)floor=Math.max(floor,s.h);return floor;}
+function moveBody(obj:T.Object3D,dx:number,dz:number){for(const [ax,amount] of [['x',dx],['z',dz]] as const){obj.position[ax]=T.MathUtils.clamp(obj.position[ax]+amount,-21.8,21.8);for(const s of solids){if(obj.position.y>=s.h-.12)continue;if(Math.abs(obj.position.x-s.x)<s.w/2+.36&&Math.abs(obj.position.z-s.z)<s.d/2+.36){obj.position[ax]=s[ax]+Math.sign(obj.position[ax]-s[ax]||-amount)*(s[ax==='x'?'w':'d']/2+.36);}}}}
+const swing=new T.Mesh(new T.TorusGeometry(1.9,.045,5,45,Math.PI*1.3),new T.MeshBasicMaterial({color:'#ffe0a0',transparent:true,opacity:.7,depthWrite:false}));swing.rotation.x=Math.PI/2;scene.add(swing);
+const clock=new T.Clock();const look=new T.Vector3(),desired=new T.Vector3(),project=new T.Vector3();
+function update(dt:number){time+=dt;invulnerable=Math.max(0,invulnerable-dt);dodgeT=Math.max(0,dodgeT-dt);stamina=Math.min(100,stamina+dt*19);const forward=new T.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));const right=new T.Vector3(Math.cos(yaw),0,-Math.sin(yaw));velocity.set(0,0,0);if(keys.has('KeyW'))velocity.add(forward);if(keys.has('KeyS'))velocity.sub(forward);if(keys.has('KeyD'))velocity.add(right);if(keys.has('KeyA'))velocity.sub(right);velocity.normalize();if(velocity.lengthSq()>0&&attackT<=0)player.rotation.y=Math.atan2(velocity.x,velocity.z);if(dodgeT>0){velocity.set(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));}const speed=dodgeT>0?13:attackT>0?2.3:6;moveBody(player,velocity.x*speed*dt,velocity.z*speed*dt);vy-=22*dt;player.position.y+=vy*dt;const floor=floorAt(player.position.x,player.position.z,player.position.y-vy*dt);if(player.position.y<=floor&&vy<=0){player.position.y=floor;vy=0;grounded=true;}else grounded=false;
+player.userData.legs.forEach((leg:T.Mesh,i:number)=>{leg.rotation.x=Math.sin(time*12+i*Math.PI)*.55*(velocity.lengthSq()>0?1:0);});player.userData.torso.rotation.z=dodgeT>0?-.3:0;
+if(attackT>0){attackT-=dt;const p=1-attackT/.48;let target:Enemy|undefined;let near=4.3;for(const e of enemies){const dist=e.mesh.position.distanceTo(player.position);if(!e.dead&&dist<near){near=dist;target=e;}}if(target){const diff=target.mesh.position.clone().sub(player.position);player.rotation.y=Math.atan2(diff.x,diff.z);}player.userData.pivot.rotation.set(Math.PI/2,0,-2+p*5);swing.visible=true;swing.position.copy(player.position).add(new T.Vector3(0,1.25,0));swing.rotation.z=player.rotation.y-p*5;(swing.material as T.MeshBasicMaterial).opacity=Math.sin(p*Math.PI)*.65;
+if(p>.25&&p<.8)for(const e of enemies){if(e.dead||hitSet.has(e))continue;const diff=e.mesh.position.clone().sub(player.position);const dist=Math.hypot(diff.x,diff.z);const facing=new T.Vector3(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));if(dist<(e.boss?3.8:3.1)&&Math.abs(diff.y)<2.3&&diff.normalize().dot(facing)>-.25){hitSet.add(e);e.hp-=combo===2?42:27;sparks(e.mesh.position);ring(e.mesh.position,'#dfb16a',1,.25);sound(95,.15,'sawtooth',.035);if(!e.boss){e.wind=0;e.cool=.65;moveBody(e.mesh,diff.x*.35,diff.z*.35);}if(e.hp<=0){e.dead=true;kills++;e.mesh.visible=false;e.label.style.display='none';const drop=sphere(.19,new T.MeshStandardMaterial({color:'#ffe7a0',emissive:'#ffb83c',emissiveIntensity:2}),e.mesh.position.x,.6,e.mesh.position.z,scene);drops.push(drop);notice(e.boss?'镇庭金刚 · 已击破':'石魇消散');if(kills===7)finish(true);}}}if(attackT<=0&&queued){queued=false;startAttack();}}else{swing.visible=false;player.userData.pivot.rotation.set(0,0,-.25);}
+for(const e of enemies){if(e.dead)continue;const diff=player.position.clone().sub(e.mesh.position),dist=Math.hypot(diff.x,diff.z);e.cool-=dt;e.mesh.rotation.y=Math.atan2(diff.x,diff.z);if(e.wind>0){e.wind-=dt;e.mesh.userData.pivot.rotation.z=-1.8+e.wind*2;if(e.wind<=0&&dist<(e.boss?3.5:2.3)&&Math.abs(diff.y)<2&&invulnerable<=0){hp=Math.max(0,hp-(e.boss?23:11));hurt=.6;invulnerable=.55;sound(60,.22,'sawtooth');ring(player.position,'#c94b30',1,.3);if(hp<=0)finish(false);}}else if(dist< (e.boss?2.9:1.8)&&Math.abs(diff.y)<2&&e.cool<=0){e.wind=e.boss?.9:.65;e.cool=e.boss?2.1:1.9;ring(e.mesh.position,'#e85a35',e.boss?3.5:2.1,e.wind);}else if(dist< (e.boss?12:10)&&dist>1.5){diff.y=0;diff.normalize();moveBody(e.mesh,diff.x*dt*(e.boss?2:2.7),diff.z*dt*(e.boss?2:2.7));e.mesh.userData.legs.forEach((leg:T.Mesh,i:number)=>leg.rotation.x=Math.sin(time*9+i*Math.PI)*.4);e.mesh.userData.pivot.rotation.z=-.4;}else{e.mesh.userData.legs.forEach((leg:T.Mesh)=>leg.rotation.x=0);}for(const other of enemies){if(other===e||other.dead)continue;const separation=e.mesh.position.clone().sub(other.mesh.position);separation.y=0;const d=separation.length();if(d>0&&d<.9){separation.normalize();moveBody(e.mesh,separation.x*dt,separation.z*dt);}}}
+for(let i=drops.length-1;i>=0;i--){const d=drops[i];d.position.y=.65+Math.sin(time*3)*.16;if(d.position.distanceTo(player.position)<1.7){hp=Math.min(100,hp+18);scene.remove(d);drops.splice(i,1);sound(620,.25);notice('灵息入体 · 生命 +18');}}
+}
+function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.033);if(running)update(dt);for(let i=effects.length-1;i>=0;i--){const e=effects[i];if(running)e.life-=dt;(e.mesh.material as T.MeshBasicMaterial).opacity=Math.max(0,e.life/e.max);if(e.life<=0){scene.remove(e.mesh);e.mesh.geometry.dispose();(e.mesh.material as T.Material).dispose();effects.splice(i,1);}}
+const t=performance.now()/1000;banners.forEach((b,i)=>{b.rotation.x=Math.sin(t*1.5+i)*.045;b.rotation.z=Math.sin(t+i)*.025;});flames.forEach((f,i)=>(f.material as T.MeshStandardMaterial).emissiveIntensity=1.8+Math.sin(t*5+i)*.25);
+look.copy(player.position).add(new T.Vector3(0,1.3,0));desired.copy(look).add(new T.Vector3(Math.sin(yaw)*8.2,1.7+pitch*4,Math.cos(yaw)*8.2));desired.x=T.MathUtils.clamp(desired.x,-22,22);desired.z=T.MathUtils.clamp(desired.z,-22,24);camera.position.lerp(desired,1-Math.exp(-dt*8));camera.lookAt(look);
+for(const e of enemies){project.copy(e.mesh.position);project.y+=e.boss?4.1:2.8;project.project(camera);e.label.style.display=started&&!e.dead&&project.z<1&&project.z>0?'block':'none';e.label.style.left=`${(project.x*.5+.5)*innerWidth}px`;e.label.style.top=`${(-project.y*.5+.5)*innerHeight}px`;e.label.querySelector('i')!.style.width=`${Math.max(0,e.hp/e.max*100)}%`;}
+el('hp').style.width=`${hp}%`;el('hpText').textContent=`${hp} / 100`;el('stamina').style.width=`${stamina}%`;el('count').textContent=String(kills);hurt=Math.max(0,hurt-dt);el('hurt').style.opacity=String(hurt*.7);if(running)noticeT=Math.max(0,noticeT-dt);el('notice').style.opacity=noticeT>0?'1':'0';renderer.render(scene,camera);}
+camera.position.set(0,5.7,20);frame();window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+// Read-only snapshot for browser smoke tests and diagnostics.
+Object.defineProperty(window,'__trial',{get:()=>({running,hp,kills,grounded,yaw,player:player.position.toArray(),enemies:enemies.map(e=>({hp:e.hp,dead:e.dead,position:e.mesh.position.toArray()}))})});
+
+exec
+/bin/bash -lc "cat package.json && cat README.md && ls -l /home/box/bin/blender /workspace/tools/run-blender.sh; find .. -name AGENTS.md -not -path '*/node_modules/*' " in /workspace/wukong-3d
+ succeeded in 0ms:
+{"name":"qitian-trial","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"vite --host 0.0.0.0","build":"tsc && vite build","preview":"vite preview --host 0.0.0.0"},"dependencies":{"three":"^0.180.0"},"devDependencies":{"@types/three":"^0.180.0","typescript":"~5.8.3","vite":"^6.3.5","@playwright/test":"^1.51.1"}}
+在线试玩：https://kingao294.github.io/qitian-trial/
+
+# 齐天试炼 · 山门余烬
+
+原创第三人称 3D 动作游戏垂直切片，使用 Vite、TypeScript、Three.js。古寺庭院、猴行者、长棍、石魇、金刚、灯笼与山景均由代码生成；音效使用 Web Audio 合成，无任何游戏提取素材。
+
+## 运行
+
+```sh
+npm install
+npm run dev
+```
+
+打开终端显示的地址（默认 http://localhost:5173）。需要支持 WebGL 的桌面浏览器与键盘鼠标。
+
+```sh
+npm run build
+npm run preview
+```
+
+## 操作
+
+- 点击「踏入山门」开始并锁定鼠标；鼠标控制跟随镜头。
+- WASD：相对镜头移动；空格：跳跃，可跳上庭院两侧石台。
+- 左键 / J：棍术攻击，连按衔接三段连击；第三段伤害更高，近敌自动辅助转向。
+- Shift：消耗精力闪避，短暂无敌；精力自动恢复。
+- Esc：暂停并释放鼠标；点击继续回到游戏。
+- 右下角声音按钮可在释放鼠标后切换合成音效。
+
+击败六名石魇与一名镇庭金刚即可通关；生命耗尽失败，可重新挑战。敌人攻击前脚下出现红色预警环，及时闪避。击败敌人掉落金色灵息，靠近恢复 18 点生命。
+
+入口：`index.html`、`src/main.ts`。游戏无需外部图片、模型或字体，全部使用程序化资源与系统字体。
+
+## 浏览器实测
+
+已使用 Chromium / Playwright 以真实键盘输入验证：开始、跳跃落地、棍术击杀全部 7 名敌人并通关、重开重置、敌人攻击扣血；无浏览器脚本异常。截图保存在 `tests/`。
+
+复跑（先启动 `npm run dev`）：
+
+```sh
+npx playwright install chromium
+node tests/smoke.mjs
+```
+
+软件 WebGL 环境运行完整战斗测试可能需要数分钟。
+-rwxr-xr-x 1 box box 71 Sep  8 13:28 /home/box/bin/blender
+-rwxr-xr-x 1 box box 89 Sep  8 13:24 /workspace/tools/run-blender.sh
+../kin-dsh-plugins/dsh-prompt-vault/AGENTS.md
+
+codex
+现有战斗可以直接保留；我会把六名杂兵移除，改成击败唯一的石狮守卫即通关。五张贴图正在生成，模型会包含可独立摆动的腿和武器节点，以接上现有移动、攻击动画。
+
+exec
+/bin/bash -lc 'cat tests/smoke.mjs' in /workspace/wukong-3d
+ succeeded in 0ms:
+import { chromium } from '@playwright/test';
+import assert from 'node:assert/strict';
+const browser=await chromium.launch({headless:true,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+const page=await browser.newPage({viewport:{width:800,height:600}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+await page.goto('http://localhost:5173');await page.waitForTimeout(1500);await page.screenshot({path:'tests/title.png'});await page.click('#start');await page.waitForTimeout(500);
+const snap=()=>page.evaluate(()=>window.__trial);
+assert.equal((await snap()).running,true);
+await page.keyboard.press('Space');await page.waitForTimeout(200);assert.ok((await snap()).player[1]>.2,'jump rises');await page.waitForFunction(()=>window.__trial.grounded,{},{timeout:15000});assert.equal((await snap()).grounded,true);
+await page.screenshot({path:'tests/gameplay.png'});
+// Fight using only keyboard inputs, with a read-only snapshot to steer toward enemies.
+for(let i=0;i<500;i++){
+ const s=await snap();if(!s.running)break;
+ const target=s.enemies.filter(e=>!e.dead).sort((a,b)=>Math.hypot(a.position[0]-s.player[0],a.position[2]-s.player[2])-Math.hypot(b.position[0]-s.player[0],b.position[2]-s.player[2]))[0];if(!target)break;
+ const wx=target.position[0]-s.player[0],wz=target.position[2]-s.player[2];const dx=wx*Math.cos(s.yaw)-wz*Math.sin(s.yaw),dz=wx*Math.sin(s.yaw)+wz*Math.cos(s.yaw);const wanted=[];if(i%25===0)console.log('step',i,'hp',s.hp,'kills',s.kills);
+ if(Math.hypot(dx,dz)>2){if(Math.abs(dx)>.7)wanted.push(dx>0?'KeyD':'KeyA');if(Math.abs(dz)>.7)wanted.push(dz>0?'KeyS':'KeyW');}
+ for(const k of ['KeyW','KeyA','KeyS','KeyD'])if(wanted.includes(k))await page.keyboard.down(k);else await page.keyboard.up(k);
+ await page.keyboard.press('KeyJ');await page.waitForTimeout(120);
+}
+for(const k of ['KeyW','KeyA','KeyS','KeyD'])await page.keyboard.up(k);
+const final=await snap();console.log('Combat result',final);assert.equal(final.kills,7,'clear all enemies through actual attacks');await page.screenshot({path:'tests/victory.png'});await page.click('#start');await page.waitForTimeout(200);assert.equal((await snap()).kills,0);assert.equal((await snap()).hp,100);
+// Stand in range to verify damage and defeat.
+await page.keyboard.down('KeyW');await page.waitForTimeout(1200);await page.keyboard.up('KeyW');await page.waitForTimeout(22000);const loss=await snap();console.log('Damage result',loss.hp);assert.ok(loss.hp<100);assert.deepEqual(errors,[]);await browser.close();
+
+exec
+/bin/bash -lc 'mkdir -p public/textures public/models tools' in /workspace/wukong-3d
+ succeeded in 0ms:
+apply patch
+patch: completed
+/workspace/wukong-3d/tools/image-prompts.json
+diff --git a/tools/image-prompts.json b/tools/image-prompts.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f2ed61e151a329871a33bc72387e0f805f9e368
+--- /dev/null
++++ b/tools/image-prompts.json
+@@ -0,0 +1,17 @@
++{
++  "mode": "Built-in image_gen",
++  "prompts": {
++    "sky_dusk": "Use case: stylized-concept. Asset type: game sky background texture, square 1024. Mythical Chinese mountain mist at dusk, distant layered jagged mountains low on horizon, expansive muted amber and slate teal cloud sky, painterly cinematic atmosphere. No foreground objects, text, logos or watermark. Original environment.",
++    "stone_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Top down orthographic Chinese temple stone pavement, large weathered charcoal gray stone slabs, subtle warm mineral variation, worn edges and fine cracks, restrained moss in joints. Flat diffuse lighting, no perspective, no cast shadows, no text, logos or watermark. Tileable edges.",
++    "wood_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Dark lacquered Chinese temple timber, deep brown almost black wood with fine vertical grain, worn warm reddish edges and subtle aged lacquer patina. Flat diffuse lighting, full frame material, no objects, perspective, shadows, text, logos or watermark. Tileable.",
++    "cloth_red": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Deep vermilion red ritual cloth fabric, fine woven silk fibers, subtle faded gold cloud pattern woven sparsely into textile, softly aged. Flat unlit surface, no folds or shadows, no text logos or watermark. Tileable edges.",
++    "boss_diffuse": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture for original stone temple lion guardian. Weathered jade gray carved stone material, subtle mineral mottling, hairline cracks with muted antique gold veins, small traces of moss, sculptural hand painted fantasy game surface. Flat diffuse lighting, no face, no complete creature, no shadows, text logos or watermark. Tileable, original no existing game assets."
++  },
++  "sources": {
++    "sky_dusk": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-2b275781-560b-4062-91cb-15bf58377a3a.png",
++    "stone_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-dc7bbd0f-4ea2-4448-a5ea-c2b477310ee4.png",
++    "wood_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-482d2ab2-0f69-409c-8121-d5c7d66a0434.png",
++    "cloth_red": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-440abd77-89fe-41e9-bacb-93eeffe40e70.png",
++    "boss_diffuse": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-1a00a5a4-bf64-40e8-8533-528219a0da90.png"
++  }
++}
+
+exec
+/bin/bash -lc "python - <<'PY'
+import json
+from PIL import Image
+p=json.load(open('tools/image-prompts.json'))
+for name,src in p['sources'].items():
+ im=Image.open(src).convert('RGB'); im.resize((1024,1024)).save('public/textures/'+name+'.jpg',quality=91)
+PY" in /workspace/wukong-3d
+ exited 127 in 0ms:
+/bin/bash: line 1: python: command not found
+
+diff --git a/tools/image-prompts.json b/tools/image-prompts.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f2ed61e151a329871a33bc72387e0f805f9e368
+--- /dev/null
++++ b/tools/image-prompts.json
+@@ -0,0 +1,17 @@
++{
++  "mode": "Built-in image_gen",
++  "prompts": {
++    "sky_dusk": "Use case: stylized-concept. Asset type: game sky background texture, square 1024. Mythical Chinese mountain mist at dusk, distant layered jagged mountains low on horizon, expansive muted amber and slate teal cloud sky, painterly cinematic atmosphere. No foreground objects, text, logos or watermark. Original environment.",
++    "stone_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Top down orthographic Chinese temple stone pavement, large weathered charcoal gray stone slabs, subtle warm mineral variation, worn edges and fine cracks, restrained moss in joints. Flat diffuse lighting, no perspective, no cast shadows, no text, logos or watermark. Tileable edges.",
++    "wood_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Dark lacquered Chinese temple timber, deep brown almost black wood with fine vertical grain, worn warm reddish edges and subtle aged lacquer patina. Flat diffuse lighting, full frame material, no objects, perspective, shadows, text, logos or watermark. Tileable.",
++    "cloth_red": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Deep vermilion red ritual cloth fabric, fine woven silk fibers, subtle faded gold cloud pattern woven sparsely into textile, softly aged. Flat unlit surface, no folds or shadows, no text logos or watermark. Tileable edges.",
++    "boss_diffuse": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture for original stone temple lion guardian. Weathered jade gray carved stone material, subtle mineral mottling, hairline cracks with muted antique gold veins, small traces of moss, sculptural hand painted fantasy game surface. Flat diffuse lighting, no face, no complete creature, no shadows, text logos or watermark. Tileable, original no existing game assets."
++  },
++  "sources": {
++    "sky_dusk": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-2b275781-560b-4062-91cb-15bf58377a3a.png",
++    "stone_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-dc7bbd0f-4ea2-4448-a5ea-c2b477310ee4.png",
++    "wood_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-482d2ab2-0f69-409c-8121-d5c7d66a0434.png",
++    "cloth_red": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-440abd77-89fe-41e9-bacb-93eeffe40e70.png",
++    "boss_diffuse": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-1a00a5a4-bf64-40e8-8533-528219a0da90.png"
++  }
++}
+
+exec
+/bin/bash -lc "python3 - <<'PY'
+import json
+from PIL import Image
+p=json.load(open('tools/image-prompts.json'))
+for name,src in p['sources'].items():
+ im=Image.open(src).convert('RGB'); im.resize((1024,1024)).save('public/textures/'+name+'.jpg',quality=91)
+PY" in /workspace/wukong-3d
+ exited 1 in 0ms:
+Traceback (most recent call last):
+  File "<stdin>", line 2, in <module>
+ModuleNotFoundError: No module named 'PIL'
+
+exec
+/bin/bash -lc "cat > tools/build_models.py <<'PY'
+\"\"\"Original low/mid poly art. Run: blender -b --python tools/build_models.py.\"\"\"
+import bpy, math, os, json
+from mathutils import Vector
+ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT=os.path.join(ROOT,'public/models'); os.makedirs(OUT,exist_ok=True)
+stats={}
+def material(name,color,texture=None,metal=0):
+ m=bpy.data.materials.new(name); m.diffuse_color=(*color,1); m.use_nodes=True
+ p=m.node_tree.nodes.get('Principled BSDF'); p.inputs['Base Color'].default_value=(*color,1); p.inputs['Metallic'].default_value=metal; p.inputs['Roughness'].default_value=.72
+ if texture:
+  t=m.node_tree.nodes.new('ShaderNodeTexImage'); t.image=bpy.data.images.load(os.path.join(ROOT,'public/textures',texture+'.jpg')); m.node_tree.links.new(t.outputs['Color'],p.inputs['Base Color'])
+ return m
+def empty(name,pos=(0,0,0)):
+ o=bpy.data.objects.new(name,None); bpy.context.collection.objects.link(o); o.location=pos; return o
+def finish(o,name,pos,scale,mat,parent=None):
+ o.name=name; o.location=pos; o.scale=scale; o.data.materials.append(mat)
+ if parent:o.parent=parent
+ return o
+def ell(name,pos,scale,mat,parent=None):
+ bpy.ops.mesh.primitive_uv_sphere_add(segments=16,ring_count=10);o=finish(bpy.context.object,name,pos,scale,mat,parent)
+ for p in o.data.polygons:p.use_smooth=True
+ return o
+def cube(name,pos,scale,mat,parent=None):
+ bpy.ops.mesh.primitive_cube_add(size=1);o=finish(bpy.context.object,name,pos,scale,mat,parent)
+ bevel=o.modifiers.new('Hand softened edges','BEVEL');bevel.width=.08;bevel.segments=2
+ o.modifiers.new('Weighted normals','WEIGHTED_NORMAL');return o
+def cone(name,pos,r1,r2,depth,mat,parent=None):
+ bpy.ops.mesh.primitive_cone_add(vertices=24,radius1=r1,radius2=r2,depth=depth)
+ return finish(bpy.context.object,name,pos,(1,1,1),mat,parent)
+def link(name,a,b,r,mat,parent=None):
+ a,b=Vector(a),Vector(b);o=cone(name,(a+b)/2,r,r*.85,(b-a).length,mat,parent);o.rotation_euler=(b-a).to_track_quat('Z','Y').to_euler();return o
+def curve(name,pts,r,mat,parent=None):
+ c=bpy.data.curves.new(name,'CURVE');c.dimensions='3D';c.bevel_depth=r;c.bevel_resolution=2
+ s=c.splines.new('BEZIER');s.bezier_points.add(len(pts)-1)
+ for p,co in zip(s.bezier_points,pts):p.co=co;p.handle_left_type='AUTO';p.handle_right_type='AUTO'
+ o=bpy.data.objects.new(name,c);bpy.context.collection.objects.link(o);o.data.materials.append(mat);o.parent=parent;return o
+def reset():bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
+def export(name):
+ # Convert bevels/curves to web-ready meshes while preserving named animation pivots.
+ for o in list(bpy.context.scene.objects):
+  if o.type in {'MESH','CURVE'}:
+   bpy.ops.object.select_all(action='DESELECT');o.select_set(True);bpy.context.view_layer.objects.active=o;bpy.ops.object.convert(target='MESH')
+ stats[name]={'triangles':sum(sum(len(p.vertices)-2 for p in o.data.polygons) for o in bpy.context.scene.objects if o.type=='MESH')}
+ bpy.ops.export_scene.gltf(filepath=os.path.join(OUT,name+'.glb'),export_format='GLB',export_yup=True)
+reset()
+fur=material('Warm umber fur',(.25,.12,.055));skin=material('Golden muzzle',(.65,.4,.19));gold=material('Antique bronze',(.65,.39,.1),metal=.65);red=material('Ritual silk',(.6,.06,.025),'cloth_red');wood=material('Lacquer',(.07,.035,.02),'wood_albedo');black=material('Obsidian',(.015,.02,.018))
+# Blender +Z up, -Y forward converts to glTF +Y up, +Z forward.
+body=empty('Torso')
+ell('Coat chest',(0,0,1.3),(.37,.23,.46),red,body)
+cone('Flared coat',(0,0,.93),.45,.3,.6,red,body)
+for s in [-1,1]:
+ leg=empty('Leg_L' if s<0 else 'Leg_R',(s*.21,0,.77))
+ link('Trouser',(0,0,0),(0,0,-.51),.135,black,leg);cube('Bronze shin',(0,-.08,-.39),(.23,.15,.31),gold,leg);ell('Boot',(0,-.13,-.67),(.16,.27,.12),black,leg)
+ ell('Shoulder',(s*.42,0,1.54),(.23,.25,.16),gold,body)
+ link('Sleeve',(s*.4,0,1.48),(s*.61,-.04,1.1),.15,red,body);ell('Hand',(s*.63,-.08,1.03),(.12,.12,.15),fur,body)
+ ell('Ear',(s*.31,0,1.98),(.13,.09,.16),fur,body);ell('Ear inset',(s*.34,-.07,1.98),(.08,.04,.1),skin,body)
+ell('Monkey head',(0,0,1.96),(.3,.245,.32),fur,body)
+for s in [-1,1]:
+ ell('Face mask',(s*.105,-.2,1.99),(.125,.08,.145),skin,body);ell('Eye',(s*.105,-.275,2.025),(.035,.02,.03),black,body)
+ link('Brow',(s*.045,-.279,2.09),(s*.17,-.255,2.105),.025,fur,body)
+ell('Muzzle',(0,-.255,1.87),(.17,.09,.105),skin,body);ell('Nose',(0,-.338,1.91),(.055,.025,.027),black,body)
+cone('Travel hat',(0,.02,2.24),.53,.09,.21,wood,body);cone('Hat bronze rim',(0,.02,2.135),.54,.54,.025,gold,body)
+cone('Sash',(0,0,1.02),.365,.365,.12,gold,body)
+for s in [-1,1]:
+ o=cube('Coat hem panel',(s*.22,-.27,.76),(.3,.065,.52),red,body);o.rotation_euler.y=s*.13
+curve('Curled monkey tail',[(0,.17,.91),(.2,.5,.8),(.48,.64,1.04),(.49,.56,1.38),(.3,.46,1.42)],.055,fur,body)
+weapon=empty('Weapon',(.65,-.15,1.2));link('Staff shaft',(0,0,-1.35),(0,0,1.65),.042,wood,weapon)
+for z in [-1.2,1.5]:
+ cone('Staff bronze end',(0,0,z),.066,.066,.34,gold,weapon)
+ for dz in [-.13,0,.13]:cone('Staff rings',(0,0,z+dz),.079,.079,.025,gold,weapon)
+export('player')
+reset()
+stone=material('Guardian stone',(.45,.5,.43),'boss_diffuse');jade=material('Carved dark jade',(.07,.15,.13));eye=material('Ember eyes',(1,.29,.035));p=eye.node_tree.nodes.get('Principled BSDF');p.inputs['Emission Color'].default_value=(1,.14,.015,1);p.inputs['Emission Strength'].default_value=3
+body=empty('Torso');ell('Lion barrel',(0,.15,1.55),(.85,1.03,.75),stone,body);ell('Breast',(0,-.63,1.64),(.85,.55,.9),stone,body)
+for s in [-1,1]:
+ leg=empty('Leg_L' if s<0 else 'Leg_R',(s*.59,-.6,1.3))
+ ell('Foreleg',(0,0,-.45),(.29,.31,.59),stone,leg);ell('Paw',(0,-.18,-1.06),(.36,.48,.24),stone,leg)
+ for dx in [-.17,0,.17]:ell('Claw',(dx,-.57,-1.08),(.075,.14,.07),gold,leg)
+ ell('Haunch',(s*.64,.85,1.04),(.43,.5,.6),stone,body);ell('Rear paw',(s*.64,.75,.23),(.36,.43,.24),stone,body)
+head=empty('Weapon',(0,-.84,2.17))
+ell('Lion skull',(0,0,0),(.66,.52,.62),stone,head)
+# Ring of individually curled mane locks.
+for i in range(16):
+ a=i*math.tau/16;x=math.sin(a)*.66;z=math.cos(a)*.65
+ ell('Mane curl',(x,.1,z),(.25,.31,.25),jade,head)
+ curve('Mane engraving',[(x-.08,-.2,z-.05),(x-.1,-.22,z+.07),(x+.04,-.22,z+.12),(x+.1,-.2,z)],.022,gold,head)
+for s in [-1,1]:
+ ell('Ear',(s*.51,.04,.56),(.22,.16,.25),stone,head)
+ ell('Eye socket',(s*.25,-.44,.15),(.21,.095,.13),jade,head);ell('Glowing eye',(s*.25,-.525,.15),(.105,.028,.05),eye,head)
+ link('Fierce brow',(s*.09,-.48,.29),(s*.43,-.39,.34),.085,stone,head)
+ ell('Muzzle lobe',(s*.2,-.48,-.17),(.29,.23,.22),stone,head)
+ cone('Fang',(s*.26,-.57,-.37),.015,.075,.24,gold,head)
+ell('Nose',(0,-.69,-.035),(.2,.08,.12),jade,head);ell('Lower jaw',(0,-.35,-.45),(.42,.32,.16),stone,head)
+cone('Forehead crest',(0,-.05,.66),.16,0,.4,gold,head)
+curve('Lion tail',[(0,1,1.5),(0,1.6,1.9),(.5,1.65,2.3),(.7,1.35,2.45)],.13,stone,body);ell('Tail tuft',(.7,1.35,2.45),(.25,.23,.25),jade,body)
+cone('Collar',(0,-.48,1.75),.84,.84,.14,gold,body).rotation_euler.x=math.pi/2
+ell('Ritual medallion',(0,-1.12,1.3),(.21,.08,.24),gold,body)
+export('boss')
+open(os.path.join(OUT,'stats.json'),'w').write(json.dumps(stats,indent=2))
+PY
+/home/box/bin/blender -b --python tools/build_models.py" in /workspace/wukong-3d
+diff --git a/tools/image-prompts.json b/tools/image-prompts.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f2ed61e151a329871a33bc72387e0f805f9e368
+--- /dev/null
++++ b/tools/image-prompts.json
+@@ -0,0 +1,17 @@
++{
++  "mode": "Built-in image_gen",
++  "prompts": {
++    "sky_dusk": "Use case: stylized-concept. Asset type: game sky background texture, square 1024. Mythical Chinese mountain mist at dusk, distant layered jagged mountains low on horizon, expansive muted amber and slate teal cloud sky, painterly cinematic atmosphere. No foreground objects, text, logos or watermark. Original environment.",
++    "stone_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Top down orthographic Chinese temple stone pavement, large weathered charcoal gray stone slabs, subtle warm mineral variation, worn edges and fine cracks, restrained moss in joints. Flat diffuse lighting, no perspective, no cast shadows, no text, logos or watermark. Tileable edges.",
++    "wood_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Dark lacquered Chinese temple timber, deep brown almost black wood with fine vertical grain, worn warm reddish edges and subtle aged lacquer patina. Flat diffuse lighting, full frame material, no objects, perspective, shadows, text, logos or watermark. Tileable.",
++    "cloth_red": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Deep vermilion red ritual cloth fabric, fine woven silk fibers, subtle faded gold cloud pattern woven sparsely into textile, softly aged. Flat unlit surface, no folds or shadows, no text logos or watermark. Tileable edges.",
++    "boss_diffuse": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture for original stone temple lion guardian. Weathered jade gray carved stone material, subtle mineral mottling, hairline cracks with muted antique gold veins, small traces of moss, sculptural hand painted fantasy game surface. Flat diffuse lighting, no face, no complete creature, no shadows, text logos or watermark. Tileable, original no existing game assets."
++  },
++  "sources": {
++    "sky_dusk": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-2b275781-560b-4062-91cb-15bf58377a3a.png",
++    "stone_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-dc7bbd0f-4ea2-4448-a5ea-c2b477310ee4.png",
++    "wood_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-482d2ab2-0f69-409c-8121-d5c7d66a0434.png",
++    "cloth_red": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-440abd77-89fe-41e9-bacb-93eeffe40e70.png",
++    "boss_diffuse": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-1a00a5a4-bf64-40e8-8533-528219a0da90.png"
++  }
++}
+
+ succeeded in 1610ms:
+INFO Draco mesh compression is available, use library at /workspace/tools/blender-4.3.2-linux-x64/4.3/python/lib/python3.11/site-packages/libextern_draco.so
+06:16:57 | INFO: Starting glTF 2.0 export
+06:16:57 | INFO: Extracting primitive: Cone.005
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.006
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cube.003
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cube.004
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Curled monkey tail
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.004
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.005
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.010
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.009
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.013
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.015
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.012
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.014
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.003
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.008
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.008
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.011
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.016
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.017
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.009
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.002
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.007
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.002
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.004
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.007
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.001
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cube.001
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.001
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Sphere.006
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cube.002
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.003
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.011
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.015
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.012
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.013
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.014
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.016
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.017
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.018
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Extracting primitive: Cone.010
+06:16:57 | INFO: Primitives created: 1
+06:16:57 | INFO: Finished glTF 2.0 export in 0.09748291969299316 s
+
+06:16:58 | INFO: Starting glTF 2.0 export
+06:16:58 | INFO: Extracting primitive: Sphere.019
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Cone.024
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.025
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.032
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.018
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Lion tail
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.026
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.033
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.062
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.061
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.022
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.023
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.024
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.020
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.021
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.029
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.030
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.031
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.027
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.028
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.051
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.055
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.052
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.056
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Cone.020
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Cone.022
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Cone.019
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Cone.021
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Cone.023
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.053
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.057
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.034
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.060
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.035
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.036
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.037
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.038
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.039
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.040
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.041
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.042
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.043
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.044
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.045
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.046
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.047
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.048
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.049
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.050
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.001
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.002
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.003
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.004
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.005
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.006
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.007
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.008
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.009
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.010
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.011
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.012
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.013
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.014
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Mane engraving.015
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.054
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.058
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Extracting primitive: Sphere.059
+06:16:58 | INFO: Primitives created: 1
+06:16:58 | INFO: Finished glTF 2.0 export in 0.14032697677612305 s
+
+Blender 4.3.2 (hash 32f5fdce0a0a built 2024-12-17 01:31:14)
+
+Blender quit
+
+codex
+五张原始贴图已生成完成，猴行者和石狮模型的建模脚本也已写好。正在处理网页用 JPEG 和模型材质打包，并把加载状态、单 Boss 胜利条件接入游戏。
+
+exec
+/bin/bash -lc 'which uv; ls /usr/bin/convert; git status --short; cat tsconfig.json; cat vite.config.*' in /workspace/wukong-3d
+ succeeded in 0ms:
+/usr/local/bin/uv
+ls: cannot access '/usr/bin/convert': No such file or directory
+ M codex-art-run.log
+?? VISUAL_BRIEF_REAL.md
+?? public/
+?? tools/
+{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"Bundler","strict":true,"skipLibCheck":true,"noEmit":true,"lib":["ES2022","DOM"]},"include":["src"]}
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  base: '/qitian-trial/',
+  server: { host: true },
+  preview: { host: true },
+})
+
+exec
+/bin/bash -lc 'python3 -m pip install pillow --break-system-packages' in /workspace/wukong-3d
+ succeeded in 964ms:
+Defaulting to user installation because normal site-packages is not writeable
+Collecting pillow
+  Using cached pillow-12.3.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+Using cached pillow-12.3.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+Installing collected packages: pillow
+Successfully installed pillow-12.3.0
+
+diff --git a/tools/image-prompts.json b/tools/image-prompts.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f2ed61e151a329871a33bc72387e0f805f9e368
+--- /dev/null
++++ b/tools/image-prompts.json
+@@ -0,0 +1,17 @@
++{
++  "mode": "Built-in image_gen",
++  "prompts": {
++    "sky_dusk": "Use case: stylized-concept. Asset type: game sky background texture, square 1024. Mythical Chinese mountain mist at dusk, distant layered jagged mountains low on horizon, expansive muted amber and slate teal cloud sky, painterly cinematic atmosphere. No foreground objects, text, logos or watermark. Original environment.",
++    "stone_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Top down orthographic Chinese temple stone pavement, large weathered charcoal gray stone slabs, subtle warm mineral variation, worn edges and fine cracks, restrained moss in joints. Flat diffuse lighting, no perspective, no cast shadows, no text, logos or watermark. Tileable edges.",
++    "wood_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Dark lacquered Chinese temple timber, deep brown almost black wood with fine vertical grain, worn warm reddish edges and subtle aged lacquer patina. Flat diffuse lighting, full frame material, no objects, perspective, shadows, text, logos or watermark. Tileable.",
++    "cloth_red": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Deep vermilion red ritual cloth fabric, fine woven silk fibers, subtle faded gold cloud pattern woven sparsely into textile, softly aged. Flat unlit surface, no folds or shadows, no text logos or watermark. Tileable edges.",
++    "boss_diffuse": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture for original stone temple lion guardian. Weathered jade gray carved stone material, subtle mineral mottling, hairline cracks with muted antique gold veins, small traces of moss, sculptural hand painted fantasy game surface. Flat diffuse lighting, no face, no complete creature, no shadows, text logos or watermark. Tileable, original no existing game assets."
++  },
++  "sources": {
++    "sky_dusk": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-2b275781-560b-4062-91cb-15bf58377a3a.png",
++    "stone_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-dc7bbd0f-4ea2-4448-a5ea-c2b477310ee4.png",
++    "wood_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-482d2ab2-0f69-409c-8121-d5c7d66a0434.png",
++    "cloth_red": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-440abd77-89fe-41e9-bacb-93eeffe40e70.png",
++    "boss_diffuse": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-1a00a5a4-bf64-40e8-8533-528219a0da90.png"
++  }
++}
+
+exec
+/bin/bash -lc "python3 - <<'PY'
+import json
+from PIL import Image
+p=json.load(open('tools/image-prompts.json'))
+for name,src in p['sources'].items():
+ im=Image.open(src).convert('RGB'); im.resize((1024,1024)).save('public/textures/'+name+'.jpg',quality=91)
+PY
+/home/box/bin/blender -b --python tools/build_models.py > /tmp/trial-blender.log 2>&1" in /workspace/wukong-3d
+exec
+/bin/bash -lc "cat > /tmp/integrate-trial.py <<'PY'
+from pathlib import Path
+p=Path('src/main.ts');s=p.read_text();s=s.replace(\"import './style.css';\",\"import './style.css';\\nimport { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';\")
+s=s.replace('肃清古寺守卫','击败镇庭石狮').replace(' / 7',' / 1').replace('金色灵息可恢复生命','红环蓄力 · 闪避反击').replace('击破六名石魇守卫，挑战镇庭金刚。','挑战镇庭石狮，破除古寺封印。').replace('原创程序化场景 /','Image 生成贴图 + Blender 原创模型 /').replace('镇庭金刚','镇庭石狮').replace('苍岚古寺 · 肃清七名守卫','苍岚古寺 · 挑战镇庭石狮').replace('七道魔障尽散','石狮封印已破').replace('if(kills===7)finish(true)','if(e.boss)finish(true)')
+s=s.replace(\"scene.background = new T.Color('#82938c'); scene.fog = new T.FogExp2('#82938c', .024)\",\"scene.background = new T.Color('#696e70'); scene.fog = new T.FogExp2('#696e70', .013)\")
+start=s.index('function warrior(');end=s.index('const player=warrior()',start)
+s=s[:start]+'''// Keep gameplay roots stable; GLB children provide all character visuals.
+function warrior(_enemy=false,boss=false){
+ const g=new T.Group(); g.name=boss?'Boss':'Player';
+ g.userData={legs:[],pivot:new T.Group(),torso:new T.Group()};
+ if(boss)g.scale.setScalar(1.3);scene.add(g);return g;
+}
+'''+s[end:]
+s=s.replace('[[-5,6,0],[6,3,0],[-6,-3,0],[5,-7,0],[-5,-10,0],[8,-12,0],[0,-11,1]]','[[0,-7,1]]')
+s=s.replace(\"const stone=mat('#727e78')\", \"const stone=mat('#b9c1b9')\")
+pos=s.index('function box(')
+s=s[:pos]+'''const assetUrl=(path:string)=>import.meta.env.BASE_URL+path;
+const manager=new T.LoadingManager();
+let artReady=false;
+const startButton=el('start') as HTMLButtonElement;
+startButton.disabled=true;startButton.textContent='山寺绘卷载入中…';
+const textureLoader=new T.TextureLoader(manager);
+function texture(name:string,repeat=1){const t=textureLoader.load(assetUrl("'`textures/${name}.jpg`));t.colorSpace=T.SRGBColorSpace;t.wrapS=t.wrapT=T.RepeatWrapping;t.repeat.set(repeat,repeat);t.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return t;}
+const stoneMap=texture('"'stone_albedo');stone.map=stoneMap;darkStone.map=stoneMap;edgeStone.map=stoneMap;
+wood.map=texture('wood_albedo');wood.color.set('#ffffff');red.map=texture('cloth_red');red.color.set('#ffffff');
+const sky=textureLoader.load(assetUrl('textures/sky_dusk.jpg'));sky.colorSpace=T.SRGBColorSpace;
+scene.background=sky;
+// Low-energy sky illumination complements the warm dusk key light.
+const environment=sky.clone();environment.mapping=T.EquirectangularReflectionMapping;
+sky.onUpdate=()=>{environment.image=sky.image;environment.needsUpdate=true;};scene.environment=environment;scene.environmentIntensity=.2;
+'''+s[pos:]
+s=s.replace(\"mat('#ffffff'),529\",\"new T.MeshStandardMaterial({map:stoneMap,roughness:.95}),529\")
+s=s.replace(\".32+rand()*.12\",\".65+rand()*.14\")
+pos=s.index('const keys=')
+s=s[:pos]+'''const gltfLoader=new GLTFLoader(manager);
+async function loadCharacter(root:T.Group,file:string){
+ const {scene:model}=await gltfLoader.loadAsync(assetUrl("'`models/${file}.glb`));
+ model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;}});
+ root.add(model);
+ root.userData={legs:[model.getObjectByName('"'Leg_L')"'!,model.getObjectByName('"'Leg_R')"'!],pivot:model.getObjectByName('"'Weapon')"'!,torso:model.getObjectByName('"'Torso')"'!};
+}
+manager.onError=(url)=>{el('"'description').textContent="'`美术资源加载失败，请刷新重试：${url}`;};
+Promise.all([loadCharacter(player,'"'player'),loadCharacter(enemies[0].mesh,'boss')]).then(()=>{
+ artReady=true;startButton.disabled=false;startButton.textContent='踏 入 山 门　→';
+}).catch(()=>{startButton.textContent='模型载入失败 · 请刷新';});
+'''+s[pos:]
+s=s.replace(\"el('start').onclick=()=>{if(ended)\",\"el('start').onclick=()=>{if("'!artReady)return;if(ended)")
+s=s.replace('"'e.mesh.userData.pivot.rotation.z=-1.8+e.wind*2','e.mesh.userData.pivot.rotation.x=-.25+e.wind*.6').replace('e.mesh.userData.pivot.rotation.z=-.4','e.mesh.userData.pivot.rotation.x=0')
+s=s.replace('({running,hp,kills,grounded,yaw,player:', '({running,artReady,hp,kills,grounded,yaw,player:')
+p.write_text(s)
+PY
+python3 /tmp/integrate-trial.py
+npm run build" in /workspace/wukong-3d
+ succeeded in 1905ms:
+diff --git a/tools/image-prompts.json b/tools/image-prompts.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f2ed61e151a329871a33bc72387e0f805f9e368
+--- /dev/null
++++ b/tools/image-prompts.json
+@@ -0,0 +1,17 @@
++{
++  "mode": "Built-in image_gen",
++  "prompts": {
++    "sky_dusk": "Use case: stylized-concept. Asset type: game sky background texture, square 1024. Mythical Chinese mountain mist at dusk, distant layered jagged mountains low on horizon, expansive muted amber and slate teal cloud sky, painterly cinematic atmosphere. No foreground objects, text, logos or watermark. Original environment.",
++    "stone_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Top down orthographic Chinese temple stone pavement, large weathered charcoal gray stone slabs, subtle warm mineral variation, worn edges and fine cracks, restrained moss in joints. Flat diffuse lighting, no perspective, no cast shadows, no text, logos or watermark. Tileable edges.",
++    "wood_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Dark lacquered Chinese temple timber, deep brown almost black wood with fine vertical grain, worn warm reddish edges and subtle aged lacquer patina. Flat diffuse lighting, full frame material, no objects, perspective, shadows, text, logos or watermark. Tileable.",
++    "cloth_red": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Deep vermilion red ritual cloth fabric, fine woven silk fibers, subtle faded gold cloud pattern woven sparsely into textile, softly aged. Flat unlit surface, no folds or shadows, no text logos or watermark. Tileable edges.",
++    "boss_diffuse": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture for original stone temple lion guardian. Weathered jade gray carved stone material, subtle mineral mottling, hairline cracks with muted antique gold veins, small traces of moss, sculptural hand painted fantasy game surface. Flat diffuse lighting, no face, no complete creature, no shadows, text logos or watermark. Tileable, original no existing game assets."
++  },
++  "sources": {
++    "sky_dusk": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-2b275781-560b-4062-91cb-15bf58377a3a.png",
++    "stone_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-dc7bbd0f-4ea2-4448-a5ea-c2b477310ee4.png",
++    "wood_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-482d2ab2-0f69-409c-8121-d5c7d66a0434.png",
++    "cloth_red": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-440abd77-89fe-41e9-bacb-93eeffe40e70.png",
++    "boss_diffuse": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-1a00a5a4-bf64-40e8-8533-528219a0da90.png"
++  }
++}
+
+ exited 2 in 1814ms:
+
+> qitian-trial@1.0.0 build
+> tsc && vite build
+
+src/main.ts(15,43): error TS2339: Property 'env' does not exist on type 'ImportMeta'.
+
+exec
+/bin/bash -lc 'ls -lh public/models public/textures; cat public/models/stats.json; rg --files tests; cat VISUAL_BRIEF_REAL.md' in /workspace/wukong-3d
+ succeeded in 0ms:
+public/models:
+total 1.9M
+-rw-r--r-- 1 box box 961K Sep  9 06:17 boss.glb
+-rw-r--r-- 1 box box 942K Sep  9 06:17 player.glb
+-rw-r--r-- 1 box box   83 Sep  9 06:17 stats.json
+
+public/textures:
+total 1.7M
+-rw-r--r-- 1 box box 414K Sep  9 06:17 boss_diffuse.jpg
+-rw-r--r-- 1 box box 353K Sep  9 06:17 cloth_red.jpg
+-rw-r--r-- 1 box box 165K Sep  9 06:17 sky_dusk.jpg
+-rw-r--r-- 1 box box 421K Sep  9 06:17 stone_albedo.jpg
+-rw-r--r-- 1 box box 313K Sep  9 06:17 wood_albedo.jpg
+{
+  "player": {
+    "triangles": 8132
+  },
+  "boss": {
+    "triangles": 23258
+  }
+}tests/title.png
+tests/victory.png
+tests/gameplay.png
+tests/smoke.mjs
+# STOP — plastic look rejected by user (2026-09-09)
+
+User: 「你这是塑料建模。。。。你去截图看看真实的吧」
+
+## Compare
+- OUR current live site (bad): https://kingao294.github.io/qitian-trial/ — primitive boxes, flat plastic shading. Local screenshot: `tests/gameplay.png`
+- REAL Black Myth Wukong look-dev refs (marketing Steam art, study only — DO NOT rip meshes/textures from the game):
+  - `/workspace/wukong-3d-ref/real/steam_library.jpg`
+  - `/workspace/wukong-3d-ref/real/steam_header.jpg`
+  - `/workspace/wukong-3d-ref/real/steam_capsule.jpg`
+
+## Required look (inspired, original)
+1. **No more candy plastic**: PBR-ish roughness/metalness, ambient occlusion, soft contact shadows, fog density like rainy mountain mist, warm key + cool fill, filmic contrast.
+2. **Character**: Destined-One inspired monkey warrior — cloth layers, fur, metal staff with worn gold, not capsule limbs. Prefer Blender sculpted/kitbashed GLB with Image textures.
+3. **Boss**: weathered stone temple guardian / stone lion vibe — cracked stone, moss, gold inlay veins — not a gray blob.
+4. **Environment**: ancient temple courtyard — wet stone, wood beams, red cloth banners, distant karst mist mountains (use generated `sky_dusk` + stone/wood/cloth textures already under `public/textures/` if present).
+5. Keep gameplay (boss fight win). Redeploy Pages when visual upgrade ships.
+
+Textures already generated via image_gen — convert with python3 if needed:
+`public/textures/{sky_dusk,stone_albedo,wood_albedo,cloth_red,boss_diffuse}.jpg`
+
+Blender: `/home/box/bin/blender` or `/workspace/tools/run-blender.sh`
+
+diff --git a/tools/image-prompts.json b/tools/image-prompts.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f2ed61e151a329871a33bc72387e0f805f9e368
+--- /dev/null
++++ b/tools/image-prompts.json
+@@ -0,0 +1,17 @@
++{
++  "mode": "Built-in image_gen",
++  "prompts": {
++    "sky_dusk": "Use case: stylized-concept. Asset type: game sky background texture, square 1024. Mythical Chinese mountain mist at dusk, distant layered jagged mountains low on horizon, expansive muted amber and slate teal cloud sky, painterly cinematic atmosphere. No foreground objects, text, logos or watermark. Original environment.",
++    "stone_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Top down orthographic Chinese temple stone pavement, large weathered charcoal gray stone slabs, subtle warm mineral variation, worn edges and fine cracks, restrained moss in joints. Flat diffuse lighting, no perspective, no cast shadows, no text, logos or watermark. Tileable edges.",
++    "wood_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Dark lacquered Chinese temple timber, deep brown almost black wood with fine vertical grain, worn warm reddish edges and subtle aged lacquer patina. Flat diffuse lighting, full frame material, no objects, perspective, shadows, text, logos or watermark. Tileable.",
++    "cloth_red": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Deep vermilion red ritual cloth fabric, fine woven silk fibers, subtle faded gold cloud pattern woven sparsely into textile, softly aged. Flat unlit surface, no folds or shadows, no text logos or watermark. Tileable edges.",
++    "boss_diffuse": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture for original stone temple lion guardian. Weathered jade gray carved stone material, subtle mineral mottling, hairline cracks with muted antique gold veins, small traces of moss, sculptural hand painted fantasy game surface. Flat diffuse lighting, no face, no complete creature, no shadows, text logos or watermark. Tileable, original no existing game assets."
++  },
++  "sources": {
++    "sky_dusk": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-2b275781-560b-4062-91cb-15bf58377a3a.png",
++    "stone_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-dc7bbd0f-4ea2-4448-a5ea-c2b477310ee4.png",
++    "wood_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-482d2ab2-0f69-409c-8121-d5c7d66a0434.png",
++    "cloth_red": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-440abd77-89fe-41e9-bacb-93eeffe40e70.png",
++    "boss_diffuse": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-1a00a5a4-bf64-40e8-8533-528219a0da90.png"
++  }
++}
+
+codex
+资源已落盘：玩家约 8,100 三角面，Boss 约 23,300 三角面，两份 GLB 均内嵌生成材质。接下来运行浏览器实测，检查模型朝向、贴图显示，以及用真实键盘攻击能否完成通关和重开。
+
+exec
+/bin/bash -lc "printf '/// <reference types=\"vite/client\" />\\n' > src/vite-env.d.ts
+python3 - <<'PY'
+from pathlib import Path
+p=Path('tests/smoke.mjs');s=p.read_text().replace(\"http://localhost:5173\",\"http://localhost:5173/qitian-trial/\").replace(\"await page.waitForTimeout(1500)\",\"await page.waitForFunction(()=>window.__trial?.artReady)\").replace(\"final.kills,7,'clear all enemies through actual attacks'\",\"final.kills,1,'defeat boss through actual attacks'\").replace('await page.waitForTimeout(1200)','await page.waitForTimeout(2400)');p.write_text(s)
+PY
+npm run build" in /workspace/wukong-3d
+exec
+/bin/bash -lc 'npm run dev' in /workspace/wukong-3d
+diff --git a/tools/image-prompts.json b/tools/image-prompts.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f2ed61e151a329871a33bc72387e0f805f9e368
+--- /dev/null
++++ b/tools/image-prompts.json
+@@ -0,0 +1,17 @@
++{
++  "mode": "Built-in image_gen",
++  "prompts": {
++    "sky_dusk": "Use case: stylized-concept. Asset type: game sky background texture, square 1024. Mythical Chinese mountain mist at dusk, distant layered jagged mountains low on horizon, expansive muted amber and slate teal cloud sky, painterly cinematic atmosphere. No foreground objects, text, logos or watermark. Original environment.",
++    "stone_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Top down orthographic Chinese temple stone pavement, large weathered charcoal gray stone slabs, subtle warm mineral variation, worn edges and fine cracks, restrained moss in joints. Flat diffuse lighting, no perspective, no cast shadows, no text, logos or watermark. Tileable edges.",
++    "wood_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Dark lacquered Chinese temple timber, deep brown almost black wood with fine vertical grain, worn warm reddish edges and subtle aged lacquer patina. Flat diffuse lighting, full frame material, no objects, perspective, shadows, text, logos or watermark. Tileable.",
++    "cloth_red": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Deep vermilion red ritual cloth fabric, fine woven silk fibers, subtle faded gold cloud pattern woven sparsely into textile, softly aged. Flat unlit surface, no folds or shadows, no text logos or watermark. Tileable edges.",
++    "boss_diffuse": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture for original stone temple lion guardian. Weathered jade gray carved stone material, subtle mineral mottling, hairline cracks with muted antique gold veins, small traces of moss, sculptural hand painted fantasy game surface. Flat diffuse lighting, no face, no complete creature, no shadows, text logos or watermark. Tileable, original no existing game assets."
++  },
++  "sources": {
++    "sky_dusk": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-2b275781-560b-4062-91cb-15bf58377a3a.png",
++    "stone_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-dc7bbd0f-4ea2-4448-a5ea-c2b477310ee4.png",
++    "wood_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-482d2ab2-0f69-409c-8121-d5c7d66a0434.png",
++    "cloth_red": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-440abd77-89fe-41e9-bacb-93eeffe40e70.png",
++    "boss_diffuse": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-1a00a5a4-bf64-40e8-8533-528219a0da90.png"
++  }
++}
+
+ succeeded in 4463ms:
+
+> qitian-trial@1.0.0 build
+> tsc && vite build
+
+vite v6.4.3 building for production...
+transforming...
+✓ 8 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.44 kB │ gzip:   0.34 kB
+dist/assets/index-B61DcR83.css    3.62 kB │ gzip:   1.37 kB
+dist/assets/index-CgH-LUX6.js   594.39 kB │ gzip: 154.68 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.95s
+
+exec
+/bin/bash -lc 'node tests/smoke.mjs' in /workspace/wukong-3d
+exec
+/bin/bash -lc "cat > README.md <<'EOF'
+# 齐天试炼 · 山门余烬
+
+Vite + TypeScript + Three.js 原创第三人称动作游戏。单关古寺庭院，击败唯一的镇庭石狮即通关；生命耗尽可重开。
+
+## 运行
+
+"'```sh
+npm install
+npm run dev
+npm run build
+```
+
+打开终端中的 `/qitian-trial/` 地址。需要支持 WebGL 的桌面浏览器。
+
+WASD 移动，鼠标转向，空格跳跃，J / 左键三段棍术，Shift 闪避，Esc 暂停。红色预警环表示 Boss 正在蓄力，利用闪避无敌时间反击。第三段攻击伤害更高。
+
+## Image + Blender 美术管线
+
+五张贴图使用 Codex 内置 **image_gen** 生成，转换为 1024×1024 JPEG，保存在 `public/textures/`：
+
+- `sky_dusk.jpg`：中国神话山峦、薄雾与暮色天空，作为背景及低强度环境光。
+- `stone_albedo.jpg`：风化古寺石板，用于庭院、石墙和石台。
+- `wood_albedo.jpg`：深色旧漆木纹，用于梁柱、长棍和斗笠。
+- `cloth_red.jpg`：暗红织物与淡金云纹，用于旗幡和行者衣袍。
+- `boss_diffuse.jpg`：灰绿风化石材、细裂纹、金色矿脉，用于石狮。
+
+完整最终提示词和生成来源记录在 `tools/image-prompts.json`。使用内置工具路径，没有调用 API CLI；工具没有提供可选择或验证的“2.5”版本参数，因此不宣称使用了特定 2.5 模型。素材为原创生成，没有游戏提取资产或品牌标志。
+
+`tools/build_models.py` 使用 Blender 建模并导出包含纹理的 GLB：
+
+```sh
+/home/box/bin/blender -b --python tools/build_models.py
+# 或 blender -b --python tools/build_models.py
+```
+
+- `public/models/player.glb`：猴行者、斗笠、分层红袍、卷尾、铜饰长棍，约 8,132 三角面。
+- `public/models/boss.glb`：石狮、卷曲鬃毛、獠牙、发光眼睛、仪式胸饰，约 23,258 三角面。
+
+模型使用静态网格及命名的腿、躯干、武器子节点，由现有战斗代码驱动简单动画，无骨骼蒙皮。GLTFLoader 加载后启用开始按钮；所有路径兼容 Vite 部署子目录。现有庭院结构保留并应用生成贴图。
+
+## 验证
+
+```sh
+# 先运行 npm run dev
+npx playwright install chromium
+node tests/smoke.mjs
+```
+
+浏览器测试通过真实键盘输入验证模型加载、跳跃、攻击击杀 Boss、胜利、重开以及敌人伤害，截图保存在 `tests/`。
+EOF' in /workspace/wukong-3d
+ succeeded in 0ms:
+diff --git a/tools/image-prompts.json b/tools/image-prompts.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f2ed61e151a329871a33bc72387e0f805f9e368
+--- /dev/null
++++ b/tools/image-prompts.json
+@@ -0,0 +1,17 @@
++{
++  "mode": "Built-in image_gen",
++  "prompts": {
++    "sky_dusk": "Use case: stylized-concept. Asset type: game sky background texture, square 1024. Mythical Chinese mountain mist at dusk, distant layered jagged mountains low on horizon, expansive muted amber and slate teal cloud sky, painterly cinematic atmosphere. No foreground objects, text, logos or watermark. Original environment.",
++    "stone_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Top down orthographic Chinese temple stone pavement, large weathered charcoal gray stone slabs, subtle warm mineral variation, worn edges and fine cracks, restrained moss in joints. Flat diffuse lighting, no perspective, no cast shadows, no text, logos or watermark. Tileable edges.",
++    "wood_albedo": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Dark lacquered Chinese temple timber, deep brown almost black wood with fine vertical grain, worn warm reddish edges and subtle aged lacquer patina. Flat diffuse lighting, full frame material, no objects, perspective, shadows, text, logos or watermark. Tileable.",
++    "cloth_red": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture. Deep vermilion red ritual cloth fabric, fine woven silk fibers, subtle faded gold cloud pattern woven sparsely into textile, softly aged. Flat unlit surface, no folds or shadows, no text logos or watermark. Tileable edges.",
++    "boss_diffuse": "Use case: stylized-concept. Asset type: seamless square 1024 game albedo texture for original stone temple lion guardian. Weathered jade gray carved stone material, subtle mineral mottling, hairline cracks with muted antique gold veins, small traces of moss, sculptural hand painted fantasy game surface. Flat diffuse lighting, no face, no complete creature, no shadows, text logos or watermark. Tileable, original no existing game assets."
++  },
++  "sources": {
++    "sky_dusk": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-2b275781-560b-4062-91cb-15bf58377a3a.png",
++    "stone_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-dc7bbd0f-4ea2-4448-a5ea-c2b477310ee4.png",
++    "wood_albedo": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-482d2ab2-0f69-409c-8121-d5c7d66a0434.png",
++    "cloth_red": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-440abd77-89fe-41e9-bacb-93eeffe40e70.png",
++    "boss_diffuse": "/home/box/.codex/generated_images/01a084cb-74cb-7470-9a49-c2cdad918e4e/exec-1a00a5a4-bf64-40e8-8533-528219a0da90.png"
++  }
++}
+
