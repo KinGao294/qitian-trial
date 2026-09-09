@@ -76,12 +76,9 @@ function warrior(_enemy=false,boss=false){
 function groundOrient(orient:T.Group){
  orient.updateWorldMatrix(true,true);
  const box=new T.Box3().setFromObject(orient);
- const cx=(box.min.x+box.max.x)*.5,cz=(box.min.z+box.max.z)*.5;
- let minY=Infinity,hits=0;
- orient.traverse(o=>{if(!(o instanceof T.Mesh)||!o.geometry)return;const pos=o.geometry.attributes.position;if(!pos)return;const v=new T.Vector3();for(let i=0;i<pos.count;i+=Math.max(1,Math.floor(pos.count/800))){v.fromBufferAttribute(pos,i).applyMatrix4(o.matrixWorld);if((v.x-cx)**2+(v.z-cz)**2<.8**2){minY=Math.min(minY,v.y);hits++;}}});
- if(hits===0||!Number.isFinite(minY))minY=box.min.y;
- orient.position.y-=minY; orient.position.y+=.02;
- console.info('[trial] groundOrient feet',{hits,minY,positionY:orient.position.y,boxMinY:box.min.y,boxMaxY:box.max.y});
+ orient.position.y-=box.min.y;
+ orient.position.y+=.02;
+ console.info('[trial] groundOrient',{minY:box.min.y,positionY:orient.position.y,maxY:box.max.y});
 }
 
 const player=warrior();player.position.set(0,0,12);
