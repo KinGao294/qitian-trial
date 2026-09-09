@@ -67,12 +67,13 @@ const motes=new T.BufferGeometry();const motePos=new Float32Array(180*3);for(let
 // Keep gameplay roots stable; Tripo GLB provides visuals. Missing bone names get safe pivots.
 function warrior(_enemy=false,boss=false){
  const g=new T.Group(); g.name=boss?'Boss':'Player';
- const visual=new T.Group(); visual.name='Visual'; g.add(visual); const orient=new T.Group(); orient.name='TripoOrient'; orient.rotation.set(-Math.PI/2,Math.PI,0); visual.add(orient);
+ const visual=new T.Group(); visual.name='Visual'; g.add(visual); const orient=new T.Group(); orient.name='TripoOrient'; orient.rotation.set(0,-Math.PI/2,0); visual.add(orient);
  const pivot=new T.Group(); pivot.name='WeaponPivot'; visual.add(pivot);
  const torso=new T.Group(); torso.name='TorsoPivot'; visual.add(torso);
  g.userData={legs:[] as T.Object3D[],pivot,torso,visual,orient,baseYaw:0,movePose:0};
  scene.add(g);return g;
 }
+function groundOrient(orient:T.Group){ orient.updateWorldMatrix(true,true); const box=new T.Box3().setFromObject(orient); orient.position.y-=box.min.y; console.info('[trial] groundOrient', {minY:box.min.y, positionY:orient.position.y}); }
 const player=warrior();player.position.set(0,0,12);
 type Enemy={mesh:T.Group,hp:number,max:number,boss:boolean,home:T.Vector3,cool:number,wind:number,fireT:number,hit:boolean,dead:boolean,label:HTMLDivElement,pattern:number};
 const enemies:Enemy[]=[];for(const [x,z,boss] of [[0,-7,1]]){const mesh=warrior(true,!!boss);mesh.position.set(x,0,z);const label=document.createElement('div');label.className='enemy-label'+(boss?' boss-label':'');label.innerHTML=`${boss?'镇山巨兽':'石魇'}<i></i>`;document.body.append(label);enemies.push({mesh,hp:boss?380:80,max:boss?380:80,boss:!!boss,home:mesh.position.clone(),cool:1+rand(),wind:0,fireT:0,hit:false,dead:false,label,pattern:0});}
@@ -110,10 +111,11 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  root.userData.pivot=weapon;
  root.userData.torso=torso;
  root.userData.model=model;
+ groundOrient(orient);
 }
 manager.onError=(url)=>{el('description').textContent=`美术资源加载失败，请刷新重试：${url}`;};
-function attachStaff(root:T.Group){ const hand=[5,4,3,2,1,0].map(i=>root.userData.model?.getObjectByName(`tripo::1_Right_Limb_${i}`)).find(Boolean) as T.Object3D|undefined; const parent=hand||root.userData.pivot; const g=new T.Group(); g.name='DinghaiStaff'; const shaft=cyl(.055,.07,2.5,black,0,0,0,g,12); shaft.rotation.z=Math.PI/2; const tip=cyl(.11,.04,.22,gold,1.28,0,0,g,10); tip.rotation.z=Math.PI/2; g.rotation.set(0,0,Math.PI/2); g.position.set(0,.05,0); parent.add(g); }
-async function loadLoco(){ try { const g=await gltfLoader.loadAsync(assetUrl('models/player-loco.glb')); const model=g.scene; model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;}}); const b=new T.Box3().setFromObject(model), sz=b.getSize(new T.Vector3()); model.scale.setScalar(1.9/Math.max(sz.y,.001)); b.setFromObject(model); model.position.y-=b.min.y; const visual=player.userData.visual as T.Group; const orient=player.userData.orient as T.Group; orient.clear(); orient.add(model); player.userData.model=model; console.info('[trial] TripoOrient Euler (-PI/2, PI, 0)'); playerMixer=new T.AnimationMixer(model); for(const clip of g.animations){const n=clip.name.toLowerCase(); if(n.includes('idle')) locoActions.idle=playerMixer.clipAction(clip); if(n.includes('walk')) locoActions.walk=playerMixer.clipAction(clip);} locoActions.idle?.play(); mixerActive=!!(locoActions.idle&&locoActions.walk); } catch(e){ console.warn('[trial] loco unavailable, using player.glb',e); } }
+function attachStaff(root:T.Group){ const parent=(root.userData.model?.getObjectByName('tripo::1_Right_Limb_5') as T.Object3D|undefined)||root.userData.pivot; const g=new T.Group(); g.name='DinghaiStaff'; const shaft=cyl(.055,.07,2.5,black,0,0,0,g,12); shaft.rotation.z=Math.PI/2; const tip=cyl(.11,.04,.22,gold,1.28,0,0,g,10); tip.rotation.z=Math.PI/2; g.rotation.set(0,0,Math.PI/2); g.position.set(0,.05,0); parent.add(g); }
+async function loadLoco(){ try { const g=await gltfLoader.loadAsync(assetUrl('models/player-loco.glb')); const model=g.scene; model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;}}); const b=new T.Box3().setFromObject(model), sz=b.getSize(new T.Vector3()); model.scale.setScalar(1.9/Math.max(sz.y,.001)); b.setFromObject(model); model.position.y-=b.min.y; const visual=player.userData.visual as T.Group; const orient=player.userData.orient as T.Group; orient.clear(); orient.add(model); player.userData.model=model; groundOrient(orient); console.info('[trial] TripoOrient Euler (0, -PI/2, 0)'); playerMixer=new T.AnimationMixer(model); for(const clip of g.animations){const n=clip.name.toLowerCase(); if(n.includes('idle')) locoActions.idle=playerMixer.clipAction(clip); if(n.includes('walk')) locoActions.walk=playerMixer.clipAction(clip);} locoActions.idle?.play(); mixerActive=!!(locoActions.idle&&locoActions.walk); } catch(e){ console.warn('[trial] loco unavailable, using player.glb',e); } }
 Promise.all([loadCharacter(player,'player',1.9),loadCharacter(enemies[0].mesh,'boss',4.2)]).then(async()=>{ await loadLoco(); attachStaff(player);
  artReady=true;startButton.disabled=false;startButton.textContent='踏 入 山 门　→';
 }).catch((err)=>{ console.error(err); artReady=true; startButton.disabled=false; startButton.textContent='踏 入 山 门　→'; showError(err); });
