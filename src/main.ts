@@ -942,7 +942,9 @@ function bossReport(){
 // `stance` stays a function: measuring it walks every skinned vertex, too slow to sample per frame.
 Object.defineProperty(window,'__trial',{get:()=>({running,artReady,hp,kills,grounded,yaw,attack:attackT>0?combo:-1,player:player.position.toArray(),stance:stanceReport,pose:poseReport,boss:bossReport,
  // Test hook: skip the cooldown roll so a smoke test can watch one specific move.
- forceBossMove:(move:BossMove)=>{const e=enemies.find(x=>x.boss);if(!e||e.dead||!running)return false;e.atk=null;e.cool=0;startBossMove(e,move,player.position.clone().sub(e.mesh.position));return true;},
+ // Supersede any move already in flight through endBossMove, so its telegraph is retired rather
+ // than left orphaned on the ground with nothing driving it.
+ forceBossMove:(move:BossMove)=>{const e=enemies.find(x=>x.boss);if(!e||e.dead||!running)return false;if(e.atk)endBossMove(e,0);e.cool=0;startBossMove(e,move,player.position.clone().sub(e.mesh.position));return true;},
  // Test hook: advance the simulation without waiting on the renderer. Software-rendered CI draws
  // roughly one frame a second, far too coarse to sample an animation cycle from wall-clock time.
  step:(steps=1,dt=1/60)=>{const d=Math.min(dt,.033);for(let i=0;i<steps&&running;i++){update(d);updateEffects(d);}return time;},
