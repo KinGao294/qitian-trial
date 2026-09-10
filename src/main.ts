@@ -374,8 +374,9 @@ function dust(pos:T.Vector3,n=8,color='#a89880',spread=1.4,power=1,size=1){
  }
 }
 // A ground ring that races outward from an impact. `radius` is the gameplay radius it ends on.
-function shockwave(pos:T.Vector3,radius:number,color='#ffb277',life=.45){
- const mesh=new T.Mesh(new T.RingGeometry(.92,1,52),additive(color,.9));
+// Wide rings need a lower `alpha`: additive blending clips to flat white once the band is thick.
+function shockwave(pos:T.Vector3,radius:number,color='#ffb277',life=.45,alpha=.9){
+ const mesh=new T.Mesh(new T.RingGeometry(.92,1,52),additive(color,alpha));
  mesh.rotation.x=-Math.PI/2;mesh.position.copy(pos);mesh.position.y+=.09;scene.add(mesh);
  fx(mesh,life,{tick:(e,age)=>{const s=radius*(.25+.75*Math.sqrt(age));e.mesh.scale.set(s,s,1);}});
 }
@@ -540,7 +541,7 @@ function bossSlam(e:Enemy,a:BossAtk,dt:number,diff:T.Vector3){
  }else{
   if(!a.hit){
    a.hit=true;
-   shockwave(a.center,S.radius,'#ffb277',.5);cracks(a.center,S.radius*.85,10);
+   shockwave(a.center,S.radius,'#ff9d5c',.5,.6);cracks(a.center,S.radius*.85,10);
    dust(a.center,13,'#9c9384',S.radius*.8,1.6,2.4);sparks(a.center,8,'#ffb066');
    shake=Math.max(shake,.44);hitstop=.05;sound(36,.45,'sawtooth',.07);
    const off=player.position.clone().sub(a.center);
@@ -689,17 +690,17 @@ if(ultT>0){
  if(p>.42&&!ultBurst){
   ultBurst=true;
   const impact=player.position.clone().add(facing.clone().multiplyScalar(3.4));
-  shockwave(player.position,8.6,'#ffe6a8',.5);
+  shockwave(player.position,8.6,'#ffce7c',.5,.42);
   groundFan(player.position,player.rotation.y,8.5,1.5,'#ffd98a',.45,false);
   cracks(impact,5.5,9,'#ffcf7a');
   dust(impact,10,'#b3a68c',2.4,1.3,2);
-  pillar(impact,'#fff2c6',1.1,5.4,.6);
+  pillar(impact,'#ffdf9e',1.1,5.4,.6);
   sound(58,.4,'sawtooth',.06);
   shake=Math.max(shake,.34);hitstop=.06;
  }
  swing.visible=true;swing.scale.setScalar(1.6);swing.position.copy(player.position).add(new T.Vector3(0,1.3,0));
- swing.rotation.z=player.rotation.y-p*Math.PI*2;(swing.material as T.MeshBasicMaterial).color.set('#fff1c2');
- (swing.material as T.MeshBasicMaterial).opacity=Math.sin(p*Math.PI)*.9;
+ swing.rotation.z=player.rotation.y-p*Math.PI*2;(swing.material as T.MeshBasicMaterial).color.set('#ffdc96');
+ (swing.material as T.MeshBasicMaterial).opacity=Math.sin(p*Math.PI)*.72;
  if(p>.18&&p<.9){
   for(const e of enemies){
    if(e.dead)continue;
