@@ -73,19 +73,133 @@ function warrior(_enemy=false,boss=false){
  g.userData={legs:[] as T.Object3D[],pivot,torso,visual,orient,baseYaw:0,movePose:0};
  scene.add(g);return g;
 }
-let boneNamesLogged=false;
-function groundOrient(orient:T.Group,kind:'player'|'boss'='player'){
- orient.updateWorldMatrix(true,true);
+// Tripo exports flip between `tripo0_Left_Limb_1` and `tripo::0_Left_Limb_1`; compare the tail only.
+const boneKey=(o:T.Object3D)=>(o.name||'').replace(/^tripo(::|_)?/i,'').toLowerCase();
+const quatAngle=(q:T.Quaternion)=>2*Math.acos(Math.min(1,Math.abs(q.w)));
+type Leg={hip:T.Object3D,knee:T.Object3D,ankle:T.Object3D,toe:T.Object3D};
+
+// Apply a rotation expressed in world axes to one bone, leaving its parent chain untouched.
+function spinBone(bone:T.Object3D,axis:T.Vector3,angle:number){
+ const parentWorld=new T.Quaternion();(bone.parent??bone).getWorldQuaternion(parentWorld);
+ bone.quaternion.premultiply(parentWorld).premultiply(new T.Quaternion().setFromAxisAngle(axis,angle)).premultiply(parentWorld.clone().invert());
+ bone.updateWorldMatrix(false,true);
+}
+// Swing `bone` so the bone→tip direction lines up with `target`. No-op when already close enough.
+function aimBone(bone:T.Object3D,tip:T.Object3D,target:T.Vector3,minDeg=1,maxDeg=120){
+ bone.updateWorldMatrix(true,true);
+ const from=new T.Vector3(),to=new T.Vector3();
+ bone.getWorldPosition(from);tip.getWorldPosition(to);
+ const dir=to.sub(from);if(dir.lengthSq()<1e-10)return 0;
+ dir.normalize();
+ const want=target.clone().normalize();
+ const angle=dir.angleTo(want);
+ if(angle<T.MathUtils.degToRad(minDeg))return 0;
+ const axis=new T.Vector3().crossVectors(dir,want);
+ if(axis.lengthSq()<1e-10)axis.set(1,0,0);
+ const applied=Math.min(angle,T.MathUtils.degToRad(maxDeg));
+ spinBone(bone,axis.normalize(),applied);
+ return T.MathUtils.radToDeg(applied);
+}
+
+// `Box3.setFromObject(_, true)` reads a SkinnedMesh's bindMatrixInverse, and only
+// `updateMatrixWorld` refreshes it — `updateWorldMatrix` leaves it stale, which double-applies the
+// parent transform and reports a body roughly twice as tall reaching far below the feet.
+function refreshMatrices(orient:T.Group){
+ orient.updateWorldMatrix(true,false);
+ orient.updateMatrixWorld(true);
+}
+
+// Legs are the only `<n>_<side>_Limb_*` group present on both sides; the other group
+// (`1_Left_Limb_*` here) is really spine + arms, so it must not be straightened.
+function findLegs(model:T.Object3D){
+ const groups=new Map<string,Map<string,T.Object3D[]>>();
+ model.traverse(o=>{
+  const m=/^(\d+)_(left|right)_limb_(\d+)$/.exec(boneKey(o));
+  if(!m)return;
+  let sides=groups.get(m[1]);if(!sides){sides=new Map();groups.set(m[1],sides);}
+  let chain=sides.get(m[2]);if(!chain){chain=[];sides.set(m[2],chain);}
+  chain[Number(m[3])]=o;
+ });
+ let best:Map<string,T.Object3D[]>|undefined,bestY=Infinity;
+ const p=new T.Vector3();
+ for(const sides of groups.values()){
+  if(sides.size<2)continue;
+  let tipY=Infinity;
+  for(const chain of sides.values()){const tip=chain.filter(Boolean).pop();if(!tip)continue;tip.getWorldPosition(p);tipY=Math.min(tipY,p.y);}
+  if(tipY<bestY){bestY=tipY;best=sides;}
+ }
+ const legs:Leg[]=[];
+ for(const chain of best?.values()??[]){
+  const bones=chain.filter(Boolean);
+  if(bones.length<3)continue;
+  legs.push({hip:bones[0],knee:bones[1],ankle:bones[bones.length-2],toe:bones[bones.length-1]});
+ }
+ return legs;
+}
+
+// Standing bind: knee straight, whole leg hanging at the floor. Ankles keep their bind bend so
+// the soles stay flat instead of pointing the toes.
+function straightenLegs(legs:Leg[]){
+ const touched:string[]=[];
+ const down=new T.Vector3(0,-1,0);
+ for(const leg of legs){
+  if(quatAngle(leg.knee.quaternion)>T.MathUtils.degToRad(20)){leg.knee.quaternion.identity();leg.knee.rotation.set(0,0,0);leg.knee.updateWorldMatrix(false,true);touched.push(leg.knee.name);}
+  if(aimBone(leg.hip,leg.ankle,down,4))touched.push(leg.hip.name);
+ }
+ return touched;
+}
+
+// Arms hang off the same bone as the head, whatever that bone happens to be named.
+const chainTip=(bone:T.Object3D)=>{let tip=bone;while(tip.children.length)tip=tip.children[0];return tip;};
+function findArms(model:T.Object3D){
+ let head:T.Object3D|undefined;
+ model.traverse(o=>{if(!head&&/^head(_|$)/.test(boneKey(o)))head=o;});
+ return head?.parent?.children.filter(c=>c!==head&&c.children.length)??[];
+}
+
+// Break the dead T-pose by swinging each arm down around the axis perpendicular to (up, arm).
+function relaxArms(arms:T.Object3D[],deg=40){
+ const touched:string[]=[];
+ const up=new T.Vector3(0,1,0),from=new T.Vector3(),to=new T.Vector3();
+ for(const shoulder of arms){
+  shoulder.updateWorldMatrix(true,true);
+  shoulder.getWorldPosition(from);shoulder.children[0].getWorldPosition(to);
+  const dir=to.sub(from);
+  if(dir.lengthSq()<1e-10)continue;
+  dir.normalize();
+  if(Math.abs(dir.y)>.5)continue;
+  const axis=new T.Vector3().crossVectors(up,dir);
+  if(axis.lengthSq()<1e-10)continue;
+  spinBone(shoulder,axis.normalize(),T.MathUtils.degToRad(deg));
+  touched.push(shoulder.name);
+ }
+ return touched;
+}
+
+let boneTreeLogged=false;
+function logBoneTree(orient:T.Group){
+ if(boneTreeLogged)return;
+ boneTreeLogged=true;
+ const rows:string[]=[];const p=new T.Vector3();
+ orient.traverse(o=>{if((o as T.Mesh).isMesh)return;o.getWorldPosition(p);rows.push(`${o.name||'(unnamed)'} < ${o.parent?.name||'-'} @y=${p.y.toFixed(3)}`);});
+ console.info('[trial] bone tree',rows.slice(0,48));
+}
+
+function groundOrient(orient:T.Group,kind:'player'|'boss'='player',feet:T.Object3D[]=[]){
+ refreshMatrices(orient);
  const box=new T.Box3();
  try{box.setFromObject(orient,true);}catch{box.setFromObject(orient);}
- let boneMin=Infinity;
- const names:string[]=[];
- orient.traverse(o=>{const n=o.name||'';if(/Limb|Root|Foot|leg|Leg/i.test(n))names.push(n);if(/^tripo0_(Left|Right)_Limb_3$/i.test(n)){const w=new T.Vector3();o.getWorldPosition(w);boneMin=Math.min(boneMin,w.y);}});
- let minY=Math.min(box.min.y,boneMin);
+ const height=Math.max(box.max.y-box.min.y,.001);
+ let footMin=Infinity;
+ const p=new T.Vector3();
+ for(const f of feet){f.getWorldPosition(p);footMin=Math.min(footMin,p.y);}
+ // Feet win over stray extremities: a hand or hair below the soles must not hang the body in air.
+ let minY=box.min.y;
+ const slack=height*.06;
+ if(Number.isFinite(footMin))minY=Math.max(minY,footMin-slack);
  orient.position.y-=minY;
  const clear=kind==='player'?.02:.15;orient.position.y+=clear;
- if(!boneNamesLogged){console.info('[trial] bone-like names',names.slice(0,40));boneNamesLogged=true;}
- console.info('[trial] groundOrient',{kind,boxMin:box.min.y,boneMin,clear,positionY:orient.position.y,boxMax:box.max.y});
+ console.info('[trial] groundOrient',{kind,boxMin:box.min.y,boxMax:box.max.y,footMin,slack,minY,clear,positionY:orient.position.y});
 }
 
 const player=warrior();player.position.set(0,0,12);
@@ -94,7 +208,38 @@ const enemies:Enemy[]=[];for(const [x,z,boss] of [[0,-7,1]]){const mesh=warrior(
 const gltfLoader=new GLTFLoader(manager);
 let playerMixer:T.AnimationMixer|undefined; let locoActions:{idle?:T.AnimationAction,walk?:T.AnimationAction}={}; let mixerActive=false; let hitstop=0;
 const MOVE_NAMES=['横扫破风','挑棍穿云','旋砸定山'];
-async function loadCharacter(root:T.Group,file:string,targetHeight:number){ const {scene:model}=await gltfLoader.loadAsync(assetUrl(`models/${file}.glb`)); model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m&&'envMapIntensity' in m){(m as T.MeshStandardMaterial).envMapIntensity=1.15;(m as T.MeshStandardMaterial).needsUpdate=true;}}}); let rootBone:T.Object3D|undefined;model.traverse(o=>{if(!rootBone&&/(^|::)Root$/i.test(o.name||''))rootBone=o;});if(rootBone&&rootBone.position.y<0){console.info('[trial] zero Root local translation',{file,oldY:rootBone.position.y});rootBone.position.y=0;} const orient=root.userData.orient as T.Group; orient.clear(); orient.rotation.set(0,-Math.PI/2,0); model.scale.setScalar(1);model.position.set(0,0,0);model.rotation.set(0,0,0);orient.add(model);if(file==='player'){let legBonesFixed=0,armBonesTouched=0;const names:string[]=[];model.traverse(o=>{const n=o.name||'';if(/^tripo0_(Left|Right)_Limb_[123]$/i.test(n)){o.rotation.set(0,0,0);o.quaternion.identity();legBonesFixed++;names.push(n);}else if(/^tripo1_Left_Limb_[456]$/i.test(n)||/^bone_1[123]$/i.test(n)){o.rotation.set(0,0,0);o.quaternion.identity();armBonesTouched++;names.push(n);}else if(n==='tripo1_Left_Limb_3'){o.rotation.set(Math.PI/2,0,0);armBonesTouched++;names.push(n);}else if(n==='bone_10'){o.rotation.set(-Math.PI/2,0,0);armBonesTouched++;names.push(n);}});console.info('[trial] player straighten',{legBonesFixed,armBonesTouched,names});}orient.updateWorldMatrix(true,true);const bb=new T.Box3().setFromObject(orient);const h=Math.max(bb.max.y-bb.min.y,.001);model.scale.setScalar(targetHeight/h);orient.updateWorldMatrix(true,true);groundOrient(orient,file==='boss'?'boss':'player');root.userData.legs=[];root.userData.model=model;console.info('[trial] load',file,'euler',orient.rotation.toArray(),'worldH',targetHeight,'scale',model.scale.x); }
+async function loadCharacter(root:T.Group,file:string,targetHeight:number){
+ const {scene:model}=await gltfLoader.loadAsync(assetUrl(`models/${file}.glb`));
+ model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m&&'envMapIntensity' in m){(m as T.MeshStandardMaterial).envMapIntensity=1.15;(m as T.MeshStandardMaterial).needsUpdate=true;}}});
+ let rootBone:T.Object3D|undefined;
+ model.traverse(o=>{if(!rootBone&&/^root$/.test(boneKey(o)))rootBone=o;});
+ console.info('[trial] root bone',{file,name:rootBone?.name??'(none)',y:rootBone?.position.y});
+ if(rootBone&&rootBone.position.y<0){console.info('[trial] zero Root local translation',{file,oldY:rootBone.position.y});rootBone.position.y=0;}
+ const orient=root.userData.orient as T.Group;
+ orient.clear();orient.rotation.set(0,-Math.PI/2,0);
+ model.scale.setScalar(1);model.position.set(0,0,0);model.rotation.set(0,0,0);
+ orient.add(model);
+ refreshMatrices(orient);
+ const feet:T.Object3D[]=[];
+ let legBones:Leg[]=[],armBones:T.Object3D[]=[];
+ if(file==='player'){
+  logBoneTree(orient);
+  const legs=legBones=findLegs(model);
+  for(const leg of legs)feet.push(leg.ankle,leg.toe);
+  armBones=findArms(model);
+  const legFixes=straightenLegs(legs);
+  const armFixes=relaxArms(armBones);
+  console.info('[trial] player straighten',{legs:legs.map(l=>[l.hip.name,l.knee.name,l.ankle.name,l.toe.name].join(' > ')).join(' | '),arms:armBones.map(a=>a.name).join(),legFixes:legFixes.join(),armFixes:armFixes.join()});
+  if(legs.length!==2)console.warn('[trial] leg chains unresolved — bone naming changed, stance will fall back to the mesh bounding box',{legs:legs.length});
+ }
+ refreshMatrices(orient);
+ const bb=new T.Box3().setFromObject(orient);
+ const h=Math.max(bb.max.y-bb.min.y,.001);
+ model.scale.setScalar(targetHeight/h);
+ groundOrient(orient,file==='boss'?'boss':'player',feet);
+ root.userData.legs=[];root.userData.model=model;root.userData.legBones=legBones;root.userData.armBones=armBones;
+ console.info('[trial] load',file,'euler',orient.rotation.toArray(),'worldH',targetHeight,'scale',model.scale.x);
+}
 
 manager.onError=(url)=>{el('description').textContent=`美术资源加载失败，请刷新重试：${url}`;};
 async function loadLoco(){ mixerActive=false; console.info('[trial] loadLoco no-op: skipping bad player-loco.glb bind pose; using upright player.glb'); return; }
@@ -304,5 +449,39 @@ shake=Math.max(0,shake-dt*1.8); look.copy(player.position).add(new T.Vector3(0,1
 for(const e of enemies){project.copy(e.mesh.position);project.y+=e.boss?5.2:2.8;project.project(camera);e.label.style.display=started&&!e.dead&&project.z<1&&project.z>0?'block':'none';e.label.style.left=`${(project.x*.5+.5)*innerWidth}px`;e.label.style.top=`${(-project.y*.5+.5)*innerHeight}px`;e.label.querySelector('i')!.setAttribute('style',`width:${Math.max(0,e.hp/e.max*100)}%`);}
 el('hp').style.width=`${hp}%`;if(el('hpText')) el('hpText')!.textContent=`${hp} / 100`;el('stamina').style.width=`${stamina}%`;if(el('count')) el('count')!.textContent=String(kills);if(el('ult')) el('ult')!.textContent=ultCd>0?`K 定海神针 · ${ultCd.toFixed(1)}s`:'K 定海神针 · 就绪';hurt=Math.max(0,hurt-dt);el('hurt').style.opacity=String(hurt*.7);if(running)noticeT=Math.max(0,noticeT-dt);el('notice').style.opacity=noticeT>0?'1':'0';renderer.render(scene,camera);}
 camera.position.set(0,5.7,20);frame();window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+// Measured standing pose, so stance regressions (floating or side-folded legs) are testable.
+function stanceReport(){
+ const legs=(player.userData.legBones??[]) as Leg[];
+ const arms=(player.userData.armBones??[]) as T.Object3D[];
+ const orient=player.userData.orient as T.Group;
+ refreshMatrices(orient);
+ const box=new T.Box3();
+ try{box.setFromObject(orient,true);}catch{box.setFromObject(orient);}
+ const at=(o:T.Object3D)=>o.getWorldPosition(new T.Vector3());
+ const boneNames:string[]=[];
+ orient.traverse(o=>{if(!(o as T.Mesh).isMesh&&o.name)boneNames.push(o.name);});
+ return {
+  floorY:player.position.y,
+  bodyMinY:box.min.y,bodyMaxY:box.max.y,
+  boneNames,
+  legs:legs.map(leg=>{
+   const hip=at(leg.hip),ankle=at(leg.ankle),toe=at(leg.toe);
+   const down=ankle.clone().sub(hip).normalize();
+   return {
+    names:[leg.hip.name,leg.knee.name,leg.ankle.name,leg.toe.name],
+    hipY:hip.y,kneeY:at(leg.knee).y,ankleY:ankle.y,toeY:toe.y,
+    // 1 means the thigh+shin line points straight at the floor, 0 means the leg sticks sideways.
+    uprightness:-down.y,
+   };
+  }),
+  arms:arms.map(shoulder=>{
+   const tip=chainTip(shoulder);
+   const dir=at(tip).sub(at(shoulder)).normalize();
+   // 0 means a dead horizontal T-pose, 1 means the arm hangs straight down.
+   return {names:[shoulder.name,tip.name],drop:-dir.y};
+  }),
+ };
+}
 // Read-only snapshot for browser smoke tests and diagnostics.
-Object.defineProperty(window,'__trial',{get:()=>({running,artReady,hp,kills,grounded,yaw,player:player.position.toArray(),enemies:enemies.map(e=>({hp:e.hp,dead:e.dead,position:e.mesh.position.toArray()}))})});
+// `stance` stays a function: measuring it walks every skinned vertex, too slow to sample per frame.
+Object.defineProperty(window,'__trial',{get:()=>({running,artReady,hp,kills,grounded,yaw,player:player.position.toArray(),stance:stanceReport,enemies:enemies.map(e=>({hp:e.hp,dead:e.dead,position:e.mesh.position.toArray()}))})});
