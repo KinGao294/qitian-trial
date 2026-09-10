@@ -33,6 +33,9 @@ async function sample(count, stepsEach = 3) {
   return out;
 }
 
+// Let the damped idle settle on the simulation clock. How many real frames rendered before this
+// point depends on machine load, and half-blended arms are not what the guard assertion is about.
+await step(30);
 const idle = await pose();
 assert.ok(idle, 'the player rig resolved from the Tripo skeleton');
 assert.equal(idle.toes.length, 2, 'both legs are driven by the rig');
