@@ -511,8 +511,9 @@ function startBossMove(e:Enemy,move:BossMove,diff:T.Vector3){
  turnToward(e,diff,.4);
  if(move==='slam'){
   const S=BOSS_MOVES.slam;
-  e.atk.center.copy(e.mesh.position).add(yawDir(e.mesh.rotation.y).multiplyScalar(S.reach));
-  telegraphDisc(e.atk.center,S.radius,'#ff5730',S.wind);
+  aimSlam(e,e.atk);
+  // Keep the handle: without it the ring is spawned once and left behind the moment the boss turns.
+  e.atk.tele=telegraphDisc(e.atk.center,S.radius,'#ff5730',S.wind);
   sound(44,.32,'sawtooth',.05);
  }else if(move==='swipe'){
   const S=BOSS_MOVES.swipe;
@@ -527,13 +528,23 @@ function startBossMove(e:Enemy,move:BossMove,diff:T.Vector3){
  }
 }
 function endBossMove(e:Enemy,cool:number){e.atk=null;e.cool=cool;}
+/**
+ * Ground zero for 巨掌砸地. The palm lands `reach` ahead of wherever the boss faces *now*, and it
+ * keeps turning through the wind-up, so this has to be recomputed every frame — and the ring has to
+ * be dragged along with it. Both the telegraph and the hit test read `a.center`, which is the only
+ * place the slam's impact point is defined, so they cannot disagree about where the blow lands.
+ */
+function aimSlam(e:Enemy,a:BossAtk){
+ a.center.copy(e.mesh.position).add(yawDir(e.mesh.rotation.y).multiplyScalar(BOSS_MOVES.slam.reach));
+ if(a.tele)a.tele.position.set(a.center.x,a.center.y+.05,a.center.z);
+}
 function bossSlam(e:Enemy,a:BossAtk,dt:number,diff:T.Vector3){
  const S=BOSS_MOVES.slam,vis=bossVisual(e);
  if(a.t<S.wind){
   // Rear back and rise: the wind-up is what makes the drop feel heavy.
   const u=ease(a.t/S.wind);
   turnToward(e,diff,1.5*dt);
-  a.center.copy(e.mesh.position).add(yawDir(e.mesh.rotation.y).multiplyScalar(S.reach));
+  aimSlam(e,a);
   vis.rotation.x=-.34*u;vis.position.y=.44*u;vis.scale.set(1-.04*u,1+.08*u,1-.04*u);
  }else if(a.t<S.wind+S.strike){
   const k=((a.t-S.wind)/S.strike)**2;
@@ -879,6 +890,12 @@ function bossReport(){
  return {
   move:e.atk?.move??null,t:e.atk?.t??0,struck:e.atk?.hit??false,cool:+e.cool.toFixed(3),
   yaw:e.mesh.rotation.y,position:e.mesh.position.toArray(),
+  // 巨掌砸地: the impact point, the radius shared by the ring and the damage check, and where the
+  // ring actually sits. A test can compare the last two to prove the telegraph tracks the turn.
+  slam:e.atk?.move==='slam'?{
+   center:e.atk.center.toArray(),radius:BOSS_MOVES.slam.radius,
+   tele:e.atk.tele?{position:e.atk.tele.position.toArray(),live:!!e.atk.tele.parent}:null,
+  }:null,
   mouth:mouth?mouth.getWorldPosition(new T.Vector3()).toArray():null,
   jet:e.atk?.jet?{origin:e.atk.jet.group.position.toArray(),dir:e.atk.dir.toArray()}:null,
   moves:BOSS_MOVES,
