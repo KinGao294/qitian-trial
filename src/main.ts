@@ -208,14 +208,20 @@ const player=warrior();player.position.set(0,0,12);
 // what the player sees on the floor is exactly what can hurt them.
 type BossMove='slam'|'swipe'|'fire';
 const BOSS_MOVES={
- slam:{wind:.95,strike:.17,recover:.72,reach:2.5,radius:4.3,damage:28,name:'巨掌砸地'},
+ // `active` is how long the palm stays down accepting hits. It exists so the warning and the damage
+ // can be driven off one number each: the ring is on the ground for wind+strike+active, and the
+ // hitbox is live for exactly the `active` tail of that. Anything shorter than a few frames would
+ // make the hit a coin flip on frame timing rather than a readable window.
+ slam:{wind:.95,strike:.17,active:.12,recover:.72,reach:2.5,radius:4.3,damage:28,name:'巨掌砸地'},
  swipe:{wind:.6,strike:.26,recover:.6,reach:.8,radius:5.4,arc:2.5,damage:22,name:'巨爪横扫'},
  fire:{wind:.9,strike:1.35,recover:.85,range:8.6,half:.21,dps:20,turn:1.1,name:'熔岩吐息'},
 } as const;
 // Where the muzzle sits inside the boss bounding box: at the front of the head mass, which on this
 // sculpt is the top-front of the body (the low tail runs out the back).
 const BOSS_MOUTH={forward:.86,up:.78};
-type BossAtk={move:BossMove,t:number,hit:boolean,dir:T.Vector3,center:T.Vector3,tele?:T.Group,jet?:ReturnType<typeof fireJet>};
+// `hit` means the blow has visibly landed; `dealt` means its damage has already been applied, which
+// is a separate question once the hitbox is live across a window rather than a single frame.
+type BossAtk={move:BossMove,t:number,hit:boolean,dealt?:boolean,dir:T.Vector3,center:T.Vector3,tele?:T.Group,jet?:ReturnType<typeof fireJet>};
 type Enemy={mesh:T.Group,hp:number,max:number,boss:boolean,home:T.Vector3,cool:number,wind:number,fireT:number,hit:boolean,dead:boolean,label:HTMLDivElement,pattern:number,atk:BossAtk|null,step:number};
 const enemies:Enemy[]=[];for(const [x,z,boss] of [[0,-7,1]]){const mesh=warrior(true,!!boss);mesh.position.set(x,0,z);const label=document.createElement('div');label.className='enemy-label'+(boss?' boss-label':'');label.innerHTML=`${boss?'镇山巨兽':'石魇'}<i></i>`;document.body.append(label);enemies.push({mesh,hp:boss?380:80,max:boss?380:80,boss:!!boss,home:mesh.position.clone(),cool:1+rand(),wind:0,fireT:0,hit:false,dead:false,label,pattern:0,atk:null,step:0});}
 const gltfLoader=new GLTFLoader(manager);
@@ -330,6 +336,14 @@ function fxAlpha(root:T.Object3D,alpha:number){root.traverse(o=>{
 });}
 function fxDispose(root:T.Object3D){root.traverse(o=>{const m=o as T.Mesh;m.geometry?.dispose();const mats=m.material;if(mats)for(const mm of Array.isArray(mats)?mats:[mats])mm.dispose();});}
 function fx(mesh:T.Object3D,life:number,extra:Partial<Fx>={}){const e:Fx={mesh,life,max:life,...extra};effects.push(e);return e;}
+/**
+ * Cut an effect short on the caller's schedule instead of letting it run out its own lifetime.
+ *
+ * Effect ages run on wall-clock dt while attack timers run on game dt, and `hitstop` zeroes the
+ * latter — so anything whose *timing* has to agree with a hitbox cannot be left to expire on its
+ * own. Telegraphs are retired from the attack clock instead.
+ */
+function retireFx(mesh?:T.Object3D){if(!mesh)return;const e=effects.find(x=>x.mesh===mesh);if(e)e.life=0;}
 const additive=(color:string,opacity=.8,vertexColors=false)=>new T.MeshBasicMaterial({color,transparent:true,opacity,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide,vertexColors});
 // Fade an additive cone along its axis so a flame is hottest at the muzzle and thins out downrange
 // instead of reading as one flat solid wedge. ConeGeometry keeps its apex at +height/2.
@@ -397,16 +411,24 @@ function groundFan(pos:T.Vector3,yaw:number,radius:number,arc:number,color:strin
  }});
  return g;
 }
-/** Closing circle under a slam: the shrinking inner ring is the “get out now” read. */
-function telegraphDisc(pos:T.Vector3,radius:number,color:string,life:number){
+/**
+ * Closing circle under a slam: the shrinking inner ring is the “get out now” read.
+ *
+ * `life` is how long the circle stays on the ground and `closeAt` (seconds) is when the blow
+ * actually lands. They differ on purpose: the countdown has to finish at the impact, then the ring
+ * holds closed and lit for the remaining frames the hitbox is live, so the warning is still on
+ * screen for every frame that can hurt you.
+ */
+function telegraphDisc(pos:T.Vector3,radius:number,color:string,life:number,closeAt=life){
  const g=new T.Group();g.position.set(pos.x,pos.y+.05,pos.z);scene.add(g);
  const flat=(inner:number,outer:number,mat:T.Material)=>{const m=new T.Mesh(new T.RingGeometry(inner,outer,46),mat);m.rotation.x=-Math.PI/2;g.add(m);return m;};
  flat(radius*.06,radius,new T.MeshBasicMaterial({color,side:T.DoubleSide,transparent:true,opacity:.14,depthWrite:false}));
  flat(radius*.93,radius,additive(color,.5));
  const closing=flat(radius*.86,radius,additive('#ffe3ae',.7));
  fx(g,life,{ownAlpha:true,tick:(e,age)=>{
-  fxAlpha(e.mesh,.3+.7*age);
-  const s=Math.max(.08,1.15-1.1*Math.min(1,age*1.06));
+  const p=Math.min(1,age*life/closeAt);
+  fxAlpha(e.mesh,.3+.7*p);
+  const s=Math.max(.08,1.15-1.07*p);
   closing.scale.set(s,s,1);
  }});
  return g;
@@ -513,7 +535,10 @@ function startBossMove(e:Enemy,move:BossMove,diff:T.Vector3){
   const S=BOSS_MOVES.slam;
   aimSlam(e,e.atk);
   // Keep the handle: without it the ring is spawned once and left behind the moment the boss turns.
-  e.atk.tele=telegraphDisc(e.atk.center,S.radius,'#ff5730',S.wind);
+  // The ring outlives the wind-up by the whole strike and active window, because the palm is still
+  // falling — and then still down — long after the old ring used to vanish. The spare life is slack
+  // against hitstop; `bossSlam` retires the ring off the attack clock the moment the danger ends.
+  e.atk.tele=telegraphDisc(e.atk.center,S.radius,'#ff5730',S.wind+S.strike+S.active+.5,S.wind+S.strike);
   sound(44,.32,'sawtooth',.05);
  }else if(move==='swipe'){
   const S=BOSS_MOVES.swipe;
@@ -527,7 +552,7 @@ function startBossMove(e:Enemy,move:BossMove,diff:T.Vector3){
   sound(52,.42,'sawtooth',.06);
  }
 }
-function endBossMove(e:Enemy,cool:number){e.atk=null;e.cool=cool;}
+function endBossMove(e:Enemy,cool:number){if(e.atk)retireFx(e.atk.tele);e.atk=null;e.cool=cool;}
 /**
  * Ground zero for 巨掌砸地. The palm lands `reach` ahead of wherever the boss faces *now*, and it
  * keeps turning through the wind-up, so this has to be recomputed every frame — and the ring has to
@@ -555,9 +580,16 @@ function bossSlam(e:Enemy,a:BossAtk,dt:number,diff:T.Vector3){
    shockwave(a.center,S.radius,'#ff9d5c',.5,.6);cracks(a.center,S.radius*.85,10);
    dust(a.center,13,'#9c9384',S.radius*.8,1.6,2.4);sparks(a.center,8,'#ffb066');
    shake=Math.max(shake,.44);hitstop=.05;sound(36,.45,'sawtooth',.07);
-   const off=player.position.clone().sub(a.center);
-   if(Math.hypot(off.x,off.z)<S.radius&&Math.abs(off.y)<2.8&&invulnerable<=0)hurtPlayer(S.damage,'#c94b30');
   }
+  // The palm rests on the ground for `active` seconds and hurts whoever is inside the warned circle
+  // during those frames. Sampling one instant instead made the outcome depend on which frame the
+  // impact happened to land on; a window is what the ring on the ground is actually promising.
+  if(a.t<S.wind+S.strike+S.active){
+   if(!a.dealt){
+    const off=player.position.clone().sub(a.center);
+    if(Math.hypot(off.x,off.z)<S.radius&&Math.abs(off.y)<2.8&&invulnerable<=0){a.dealt=true;hurtPlayer(S.damage,'#c94b30');}
+   }
+  }else retireFx(a.tele);
   const u=ease(Math.min(1,(a.t-S.wind-S.strike)/S.recover));
   vis.rotation.x=.58*(1-u);vis.position.y=-.08*(1-u);
   vis.scale.set(1+.11*(1-u),1-.1*(1-u),1+.11*(1-u));
@@ -892,9 +924,14 @@ function bossReport(){
   yaw:e.mesh.rotation.y,position:e.mesh.position.toArray(),
   // 巨掌砸地: the impact point, the radius shared by the ring and the damage check, and where the
   // ring actually sits. A test can compare the last two to prove the telegraph tracks the turn.
+  // `warned` (ring on the ground) and `dangerous` (hitbox accepting hits) are the two windows the
+  // move has to keep aligned, so a test can assert dangerous ⊆ warned frame by frame.
   slam:e.atk?.move==='slam'?{
    center:e.atk.center.toArray(),radius:BOSS_MOVES.slam.radius,
    tele:e.atk.tele?{position:e.atk.tele.position.toArray(),live:!!e.atk.tele.parent}:null,
+   warned:!!e.atk.tele?.parent,dealt:!!e.atk.dealt,
+   dangerous:e.atk.t>=BOSS_MOVES.slam.wind+BOSS_MOVES.slam.strike
+    &&e.atk.t<BOSS_MOVES.slam.wind+BOSS_MOVES.slam.strike+BOSS_MOVES.slam.active,
   }:null,
   mouth:mouth?mouth.getWorldPosition(new T.Vector3()).toArray():null,
   jet:e.atk?.jet?{origin:e.atk.jet.group.position.toArray(),dir:e.atk.dir.toArray()}:null,
