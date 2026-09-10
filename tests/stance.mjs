@@ -14,7 +14,8 @@ await page.click('#start');
 await page.waitForTimeout(600);
 
 const stance = await page.evaluate(() => window.__trial.stance());
-console.log('\nstance', JSON.stringify(stance, null, 1));
+console.log('\nbone names as three.js sees them:', stance.boneNames.join(', '));
+console.log('\nstance', JSON.stringify({ ...stance, boneNames: undefined }, null, 1));
 
 assert.equal(stance.legs.length, 2, 'both legs resolved from the Tripo bone tree');
 const height = stance.bodyMaxY - stance.bodyMinY;
@@ -38,8 +39,15 @@ for (const leg of stance.legs) {
 const toes = stance.legs.map(l => l.toeY);
 assert.ok(Math.abs(toes[0] - toes[1]) < height * 0.03, 'feet level with each other');
 
-// three.js strips ':' from glTF node names, so a matcher written only for `tripo::0_` silently
-// matches nothing. Every bone name below must be a real resolved bone, never empty.
+// The GLB stores `tripo::0_Left_Limb_0`, but GLTFLoader passes every node name through
+// PropertyBinding.sanitizeNodeName, whose reserved set ('\\[\\]\\.:\\/') deletes ':'. So a matcher
+// written for the on-disk spelling matches nothing at runtime. Pin both halves of that down.
+const withColons = stance.boneNames.filter(n => n.includes('::'));
+assert.deepEqual(withColons, [], 'three.js strips "::" — a /tripo::0_/ matcher would match nothing');
+const legMatchers = stance.boneNames.filter(n => /^tripo0_(Left|Right)_Limb_[0-3]$/.test(n));
+assert.equal(legMatchers.length, 8, `colon-less leg bone names are what exist at runtime, got ${JSON.stringify(stance.boneNames)}`);
+
+// Every bone name below must be a real resolved bone, never empty.
 for (const names of [...stance.legs, ...stance.arms].map(p => p.names)) {
   assert.ok(names.every(n => n && n.length), `resolved bone names, got ${JSON.stringify(names)}`);
 }

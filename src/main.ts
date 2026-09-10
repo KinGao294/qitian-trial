@@ -230,6 +230,7 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
   const legFixes=straightenLegs(legs);
   const armFixes=relaxArms(armBones);
   console.info('[trial] player straighten',{legs:legs.map(l=>[l.hip.name,l.knee.name,l.ankle.name,l.toe.name].join(' > ')).join(' | '),arms:armBones.map(a=>a.name).join(),legFixes:legFixes.join(),armFixes:armFixes.join()});
+  if(legs.length!==2)console.warn('[trial] leg chains unresolved — bone naming changed, stance will fall back to the mesh bounding box',{legs:legs.length});
  }
  refreshMatrices(orient);
  const bb=new T.Box3().setFromObject(orient);
@@ -457,9 +458,12 @@ function stanceReport(){
  const box=new T.Box3();
  try{box.setFromObject(orient,true);}catch{box.setFromObject(orient);}
  const at=(o:T.Object3D)=>o.getWorldPosition(new T.Vector3());
+ const boneNames:string[]=[];
+ orient.traverse(o=>{if(!(o as T.Mesh).isMesh&&o.name)boneNames.push(o.name);});
  return {
   floorY:player.position.y,
   bodyMinY:box.min.y,bodyMaxY:box.max.y,
+  boneNames,
   legs:legs.map(leg=>{
    const hip=at(leg.hip),ankle=at(leg.ankle),toe=at(leg.toe);
    const down=ankle.clone().sub(hip).normalize();
