@@ -436,7 +436,7 @@ function cracks(pos:T.Vector3,radius:number,n=7,color='#ff9d52'){
  }
 }
 // Rising column of light for the ultimate: a stack of additive shells that flare and lift.
-function pillar(pos:T.Vector3,color:string,radius:number,height:number,life=.7){
+function pillar(pos:T.Vector3,color:string,radius:number,height:number,life=.7,glow=12){
  const g=new T.Group();g.position.copy(pos);scene.add(g);
  for(let i=0;i<3;i++){
   const geom=new T.CylinderGeometry(radius*(1-i*.28),radius*(1.5-i*.3),height,20,5,true);
@@ -445,7 +445,7 @@ function pillar(pos:T.Vector3,color:string,radius:number,height:number,life=.7){
   const shell=new T.Mesh(geom,additive(color,.2-i*.05,true));
   shell.rotation.x=Math.PI;shell.position.y=height/2;g.add(shell);
  }
- const light=new T.PointLight(color,18,16,2);light.position.y=1.4;g.add(light);
+ const light=new T.PointLight(color,glow,16,2);light.position.y=1.4;g.add(light);
  fx(g,life,{tick:(e,age)=>{e.mesh.scale.set(1+age*.55,1+age*.35,1+age*.55);e.mesh.rotation.y=age*2.2;}});
 }
 // --- boss fire breath: mouth ember charge, then a tracked jet whose cone *is* the hitbox ---
@@ -694,7 +694,9 @@ if(ultT>0){
   groundFan(player.position,player.rotation.y,8.5,1.5,'#ffd98a',.45,false);
   cracks(impact,5.5,9,'#ffcf7a');
   dust(impact,10,'#b3a68c',2.4,1.3,2);
-  pillar(impact,'#ffdf9e',1.1,5.4,.6);
+  // The strike lands where the boss stands, so this column stays dim — a bright one blows the
+  // silhouette out to white and the player loses track of what they are hitting.
+  pillar(impact,'#ffdf9e',1.1,5.4,.6,7);
   sound(58,.4,'sawtooth',.06);
   shake=Math.max(shake,.34);hitstop=.06;
  }
