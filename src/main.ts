@@ -83,8 +83,8 @@ function groundOrient(orient:T.Group,kind:'player'|'boss'='player'){
  orient.traverse(o=>{const n=o.name||'';if(/Limb|Root|Foot|leg|Leg/i.test(n))names.push(n);if(/tripo0_.*Limb_3|0_.*Limb_3|Foot|Ankle/i.test(n)){const w=new T.Vector3();o.getWorldPosition(w);boneMin=Math.min(boneMin,w.y);}});
  let minY=box.min.y;if(Number.isFinite(boneMin))minY=Math.min(minY,boneMin);
  orient.position.y-=minY;
- const clear=kind==='player'?.75:.15;orient.position.y+=clear;
- if(kind==='player')orient.position.y=Math.max(orient.position.y,.7);
+ const clear=kind==='player'?.25:.15;orient.position.y+=clear;
+ if(kind==='player')orient.position.y=Math.max(orient.position.y,.2);
  if(!boneNamesLogged){console.info('[trial] bone-like names',names.slice(0,40));boneNamesLogged=true;}
  console.info('[trial] groundOrient',{kind,boxMin:box.min.y,boneMin,clear,positionY:orient.position.y,boxMax:box.max.y});
 }
