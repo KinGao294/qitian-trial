@@ -286,12 +286,12 @@ const keys=new Set<string>();let touchMoveX=0,touchMoveY=0;let running=false,sta
 // Animation-only state: air time, landing recovery, hit flinch and the recoil from the player's own
 // blow connecting all feed the pose layers.
 let airT=0,landT=0,flinchT=0,impactT=0,wasGrounded=true,ultBurst=false,ultFlash=false,footPhase=0;
-// 定海神针 staging: the golden halo winds up with the turn, hangs at the overhead beat, then
-// collapses into the plunge. Same keyed tracks as the body pose, so the light and the warrior
-// cannot drift apart.
-// One staff art, same beats as the body: wind back, hold, then accelerate through contact.
+// Effect timing runs on the same keyed tracks as the body pose (see `src/rig.ts`), so the light and
+// the warrior cannot drift apart: the halo's beats *are* the skeleton's beats.
+// The staff halo of one art: wind back, hold, then accelerate through contact.
 const ATK_ARC:Key[]=[[0,0],[.29,-.12,'out'],[.36,-.12,'hold'],[.54,1,'in'],[.74,1.08,'out'],[1,1.12]];
 const ATK_FADE:Key[]=[[0,0],[.3,.1,'out'],[.37,.12,'hold'],[.5,1,'in'],[.7,.72,'out'],[1,0,'in']];
+// 定海神针: the halo winds up with the turn, hangs at the overhead beat, then collapses into the plunge.
 const ULT_STAFF_SPIN:Key[]=[[0,0],[.18,-.3,'out'],[.26,-.3,'hold'],[.56,Math.PI*4,'in'],[.7,Math.PI*4.4,'out'],[1,Math.PI*4.6]];
 const ULT_STAFF_SCALE:Key[]=[[0,.5],[.3,.85,'out'],[.52,2,'in'],[.6,2.1,'hold'],[.72,1.1,'in'],[1,1.5,'out']];
 const ULT_STAFF_FADE:Key[]=[[0,0],[.3,.35,'out'],[.52,.85,'in'],[.62,.9,'hold'],[.86,.5,'linear'],[1,0,'in']];
@@ -299,7 +299,10 @@ const ULT_STAFF_Y:Key[]=[[0,-.35],[.3,-.45,'out'],[.56,.85,'out'],[.64,.85,'hold
 player.rotation.y=0;let shake=0;let muted=false,audioCtx:AudioContext|undefined;
 function sound(freq:number,duration=.12,type:OscillatorType='sine',volume=.055){if(muted)return;try{audioCtx??=new AudioContext();const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();osc.type=type;osc.frequency.setValueAtTime(freq,audioCtx.currentTime);osc.frequency.exponentialRampToValueAtTime(Math.max(25,freq*.35),audioCtx.currentTime+duration);gain.gain.setValueAtTime(volume,audioCtx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+duration);osc.connect(gain).connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime+duration);}catch{}}
 function notice(text:string){if(el('notice')) el('notice')!.textContent=text;noticeT=2;}
-function startAttack(){if(!running||dodgeT>0||ultT>0)return;if(attackT>0){queued=true;return;}combo=time-lastAttack<.85?(combo+1)%3:0;attackT=ATTACK_DUR[combo];lastAttack=time;hitSet.clear();sound(210+combo*90,.16+(combo*.04),'triangle',.06+combo*.01);notice(`行者 · ${MOVE_NAMES[combo]}`);staffSlashTrail(player.position,player.rotation.y,combo);}
+// No slash trail here: the arts open on a wind-up, and a full trail thrown on the frame the input
+// lands paints the blow before the body has even started moving. The trails belong to the strike
+// window in `update()`; the input gets grit under the boots and a cue in the ear instead.
+function startAttack(){if(!running||dodgeT>0||ultT>0)return;if(attackT>0){queued=true;return;}combo=time-lastAttack<.85?(combo+1)%3:0;attackT=ATTACK_DUR[combo];lastAttack=time;hitSet.clear();sound(210+combo*90,.16+(combo*.04),'triangle',.06+combo*.01);notice(`行者 · ${MOVE_NAMES[combo]}`);if(grounded)dust(player.position,3,'#9d968a',.8,.5,.7);}
 function startUltimate(){
  if(!running||dodgeT>0||ultT>0||ultCd>0||attackT>0)return;
  if(stamina<45){notice('灵力不足 · 无法定海');return;}
@@ -489,10 +492,6 @@ function impactBloom(pos:T.Vector3,dir:T.Vector3,tier=0){
  }
 }
 /**
- * Grit peeled off the flagstones and dragged upward. Spawned while something heavy is still on its
- * way down, so the ground answers the blow before it lands — the cue that reads as "move now".
- */
-/**
  * Embers pulled inward to a point and swallowed. The opposite gesture to every other effect here,
  * which is exactly why it reads as gathering rather than as another explosion.
  */
@@ -511,6 +510,10 @@ function convergeMotes(pos:T.Vector3,n:number,radius:number,life:number,color='#
   }});
  }
 }
+/**
+ * Grit peeled off the flagstones and dragged upward. Spawned while something heavy is still on its
+ * way down, so the ground answers the blow before it lands — the cue that reads as "move now".
+ */
 function gritRise(pos:T.Vector3,n:number,spread:number,color='#a2988a'){
  for(let i=0;i<n;i++){
   const a=rand()*Math.PI*2,r=spread*(.35+rand()*.65);
