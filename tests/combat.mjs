@@ -136,70 +136,126 @@ for (const move of ['slam', 'swipe', 'fire']) {
   assert.equal((await boss()).move, null, `${move} recovers back to neutral`);
 }
 
-// --- regression: 巨掌砸地's ring must ride along with the turn its hitbox already follows ---
-// Ground zero is `reach` ahead of the boss's *current* facing and the boss keeps tracking the player
-// all through the wind-up, so a ring spawned once and left behind marks ground the palm never
-// touches. Close in, force the slam, then strafe so the boss has to turn a long way while winding
-// up, and sample every single frame: the drawn ring and the live hitbox centre must not part.
-for (let i = 0; i < 120; i++) {
-  const b = await boss();
-  const me = (await page.evaluate(() => window.__trial)).player;
-  if (Math.hypot(me[0] - b.position[0], me[2] - b.position[2]) < 7.5) break;
-  await page.keyboard.down('KeyW');
-  await step(6);
-}
-await page.keyboard.up('KeyW');
-assert.ok(await page.evaluate(() => window.__trial.forceBossMove('slam')), 'boss starts the tracked slam');
-const slamSpec = (await boss()).moves.slam;
-const opened = await boss();
-const yaw0 = opened.yaw;
-assert.ok(opened.slam, 'the slam reports its ground zero and its ring');
-// The original bug in one assertion: the ring was spawned and the handle thrown away, so nothing
-// could move it afterwards even though the hitbox centre was recomputed every frame.
-assert.ok(opened.slam.tele?.live, 'the slam holds on to its ring so the turn can drag it along');
-await page.keyboard.down('KeyD'); // strafe, so tracking forces a real turn
-let worstDrift = 0, turned = 0, frames = 0, frozen = null;
-for (let i = 0; i < Math.ceil(slamSpec.wind * 60); i++) {
-  await step(1);
-  const b = await boss();
-  if (b.move !== 'slam' || !b.slam?.tele?.live) break;
-  frozen = b.slam.center;
-  frames++;
-  turned = Math.max(turned, Math.abs(((b.yaw - yaw0 + Math.PI * 3) % (Math.PI * 2)) - Math.PI));
-  worstDrift = Math.max(worstDrift, Math.hypot(
-    b.slam.tele.position[0] - b.slam.center[0], b.slam.tele.position[2] - b.slam.center[2]));
-  // The hitbox centre itself must stay pinned `reach` straight ahead of the boss.
-  const ahead = (b.slam.center[0] - b.position[0]) * Math.sin(b.yaw)
-    + (b.slam.center[2] - b.position[2]) * Math.cos(b.yaw);
-  const side = (b.slam.center[0] - b.position[0]) * Math.cos(b.yaw)
-    - (b.slam.center[2] - b.position[2]) * Math.sin(b.yaw);
-  assert.ok(Math.abs(ahead - slamSpec.reach) < 0.02,
-    `ground zero stays ${slamSpec.reach}m ahead of the boss (got ${ahead.toFixed(3)}m)`);
-  assert.ok(Math.abs(side) < 0.02, `ground zero stays on the boss's centre line (off by ${side.toFixed(3)}m)`);
-}
-await page.keyboard.up('KeyD');
-await shot('boss-slam-tracking');
-console.log(`slam telegraph: ${frames} frames, turned ${turned.toFixed(2)} rad, worst drift ${worstDrift.toFixed(4)}m`);
-assert.ok(frames > 20, `sampled the whole wind-up (${frames} frames)`);
-// Without a turn this proves nothing, so fail loudly rather than passing on a stationary boss.
-assert.ok(turned > 0.25, `the boss really turned while winding up (${turned.toFixed(2)} rad)`);
-assert.ok(worstDrift < 0.02, `the ring tracks the hitbox centre through the turn (worst ${worstDrift.toFixed(4)}m)`);
+// --- 巨掌砸地: the warned circle and the live hitbox must be the same circle at the same time ---
+// Two ways this drifts apart. In space: ground zero is `reach` ahead of the boss's *current* facing
+// and the boss keeps tracking the player through the wind-up, so a ring that is not dragged along
+// marks ground the palm never touches. In time: the palm keeps falling for `strike` after the
+// wind-up and then rests for `active`, so a ring that expires with the wind-up leaves the hitbox
+// live with nothing drawn under it — and because `hitstop` freezes attack timers but not effect
+// ages, a ring left to run out its own lifetime slides out from under the active frames too.
+//
+// Both runs live entirely inside the page: a 0.12s window is far too fine to resolve over the wire.
+const slam = await page.evaluate(() => {
+  const key = (c, d) => window.dispatchEvent(new KeyboardEvent(d ? 'keydown' : 'keyup', { code: c }));
+  const T = () => window.__trial;  // the getter rebuilds a snapshot, so hp/player must be re-read
+  const settle = () => { for (let i = 0; i < 900 && T().boss().move; i++) T().step(1, 1 / 60); };
+  const approach = d => {
+    key('KeyW', true);
+    for (let i = 0; i < 900; i++) {
+      const b = T().boss(), me = T().player;
+      if (Math.hypot(me[0] - b.position[0], me[2] - b.position[2]) < d) break;
+      T().step(1, 1 / 60);
+    }
+    key('KeyW', false);
+  };
+  // `hold` is pressed from `after` seconds into the wind-up: strafing forces the boss to turn,
+  // running backwards bolts out of the circle before the palm commits.
+  const run = (hold, after) => {
+    settle();
+    approach(4.6);
+    settle();
+    const hp0 = T().hp, frames = [];
+    if (!T().forceBossMove('slam')) return { failed: true };
+    for (let i = 0; i < 240; i++) {
+      T().step(1, 1 / 60);
+      const b = T().boss();
+      if (!b.move) break;
+      if (hold && b.t > after) key(hold, true);
+      const me = T().player, s = b.slam, d = Math.hypot(me[0] - s.center[0], me[2] - s.center[2]);
+      frames.push({
+        t: b.t, yaw: b.yaw, warned: s.warned, dangerous: s.dangerous, struck: b.struck, dist: d,
+        drift: s.tele ? Math.hypot(s.tele.position[0] - s.center[0], s.tele.position[2] - s.center[2]) : null,
+        ahead: (s.center[0] - b.position[0]) * Math.sin(b.yaw) + (s.center[2] - b.position[2]) * Math.cos(b.yaw),
+        side: (s.center[0] - b.position[0]) * Math.cos(b.yaw) - (s.center[2] - b.position[2]) * Math.sin(b.yaw),
+        inside: d < s.radius, hp: T().hp,
+      });
+    }
+    if (hold) key(hold, false);
+    return { hp0, hpEnd: T().hp, frames };
+  };
+  // Only `stand` is meant to connect: the health budget here is one slam.
+  const stand = run(null, 0);        // stays put inside the circle
+  const flee = run('KeyS', 0);       // backs straight out of the circle during the wind-up
+  const strafe = run('KeyD', 0);     // forces the boss to turn, dragging ground zero round with it
+  return { spec: T().boss().moves.slam, stand, flee, strafe };
+});
 
-// The ring is a promise about where the palm lands; the damage has to keep it.
-const hpBefore = await page.evaluate(() => window.__trial.hp);
-for (let i = 0; i < 120 && !(await boss()).struck; i++) await step(2);
-const landed2 = await boss();
-assert.ok(landed2.struck, 'the tracked slam lands');
-assert.ok(Math.hypot(landed2.slam.center[0] - frozen[0], landed2.slam.center[2] - frozen[2]) < 0.05,
-  'ground zero is frozen where the ring last drew it, not moved again during the drop');
-const standing = (await page.evaluate(() => window.__trial)).player;
-const fromCentre = Math.hypot(standing[0] - landed2.slam.center[0], standing[2] - landed2.slam.center[2]);
-const hpAfter = await page.evaluate(() => window.__trial.hp);
-console.log(`slam impact: player ${fromCentre.toFixed(2)}m from ground zero, ring ${landed2.slam.radius}m, hp ${hpBefore}->${hpAfter}`);
-if (fromCentre < landed2.slam.radius - 0.6)
-  assert.ok(hpAfter < hpBefore, `inside the ${landed2.slam.radius}m ring (${fromCentre.toFixed(2)}m) takes the hit`);
-if (fromCentre > landed2.slam.radius + 0.6)
-  assert.equal(hpAfter, hpBefore, `outside the ${landed2.slam.radius}m ring (${fromCentre.toFixed(2)}m) is safe`);
+const S = slam.spec;
+const impact = S.wind + S.strike;
+assert.ok(S.active > 0.05, `the hitbox has a readable active window (${S.active}s)`);
+for (const [name, run] of Object.entries({ stand: slam.stand, flee: slam.flee, strafe: slam.strafe })) {
+  assert.ok(!run.failed, `${name}: the slam started`);
+  const f = run.frames, danger = f.filter(r => r.dangerous), warned = f.filter(r => r.warned);
+  const lost = run.hp0 - run.hpEnd;
+  console.log(`slam/${name}: warned ${warned[0]?.t.toFixed(3)}..${warned.at(-1)?.t.toFixed(3)}s (${warned.length}f), `
+    + `dangerous ${danger[0]?.t.toFixed(3)}..${danger.at(-1)?.t.toFixed(3)}s (${danger.length}f), `
+    + `drift<=${Math.max(...warned.map(r => r.drift ?? 0)).toFixed(4)}m, `
+    + `dist on active frames ${Math.min(...danger.map(r => r.dist)).toFixed(2)}..${Math.max(...danger.map(r => r.dist)).toFixed(2)}m, hp -${lost.toFixed(1)}`);
+
+  // Timing: the hitbox may never be live without the ring under it, and never before the palm lands.
+  assert.ok(danger.length >= 5, `${name}: the hitbox is live across a window, not one frame (${danger.length} frames)`);
+  assert.equal(danger.filter(r => !r.warned).length, 0,
+    `${name}: every dangerous frame still has the warning ring on the ground`);
+  assert.ok(danger.every(r => r.t >= impact - 1e-6), `${name}: nothing is dangerous before the palm lands`);
+  assert.ok(warned.at(-1).t >= danger.at(-1).t, `${name}: the ring outlasts the last dangerous frame`);
+
+  // Space: the drawn ring sits on the hitbox centre, which stays pinned ahead of the boss.
+  assert.ok(Math.max(...warned.map(r => r.drift ?? 0)) < 0.02, `${name}: the ring sits on the hitbox centre`);
+  const wind = f.filter(r => r.t < S.wind);
+  assert.ok(Math.max(...wind.map(r => Math.abs(r.ahead - S.reach))) < 0.02,
+    `${name}: ground zero stays ${S.reach}m ahead of the boss`);
+  assert.ok(Math.max(...wind.map(r => Math.abs(r.side))) < 0.02,
+    `${name}: ground zero stays on the boss's centre line`);
+
+  // The circle is a promise: you are hurt exactly when you were inside it while it was live.
+  const exposed = danger.some(r => r.inside);
+  assert.equal(lost > 0, exposed, `${name}: damage matches the warned circle (inside=${exposed}, lost ${lost.toFixed(1)}hp)`);
+  if (exposed) assert.ok(Math.abs(lost - S.damage) < 0.01, `${name}: one slam deals ${S.damage}, not ${lost.toFixed(1)}`);
+}
+// Each run only proves its case if it actually did the thing it was set up to do.
+const active = run => run.frames.filter(r => r.dangerous);
+assert.ok(active(slam.stand).every(r => r.inside),
+  'the standing run really was inside the circle on the active frames');
+assert.ok(Math.abs((slam.stand.hp0 - slam.stand.hpEnd) - S.damage) < 0.01,
+  `standing in the warned circle through the active frames takes the ${S.damage} hit`);
+assert.ok(active(slam.flee).every(r => r.dist > S.radius),
+  'the dodging run really was outside the circle on the active frames');
+assert.equal(slam.flee.hp0 - slam.flee.hpEnd, 0, 'leaving the warned circle before impact takes no slam damage');
+const yawSpread = fs => Math.max(...fs.map(r => Math.abs(((r.yaw - fs[0].yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI)));
+assert.ok(yawSpread(slam.strafe.frames) > 0.25,
+  `the boss really turned while winding up (${yawSpread(slam.strafe.frames).toFixed(2)} rad)`);
+
+// A frame from inside the active window, to see the warning still lit under the impact. The player
+// runs clear first, so this proof shot costs no health — one slam is all the budget there is here.
+const held = await page.evaluate(() => {
+  const key = (c, d) => window.dispatchEvent(new KeyboardEvent(d ? 'keydown' : 'keyup', { code: c }));
+  const T = () => window.__trial;
+  for (let i = 0; i < 900 && T().boss().move; i++) T().step(1, 1 / 60);
+  if (!T().forceBossMove('slam')) return null;
+  for (let i = 0; i < 300; i++) {
+    T().step(1, 1 / 60);
+    const b = T().boss();
+    if (!b.move) break;
+    if (b.t > 0.15) key('KeyS', true);
+    if (b.slam.dangerous) { T().step(3, 1 / 60); break; }
+  }
+  key('KeyS', false);
+  return T().boss().slam;
+});
+assert.ok(held, 'the proof-shot slam started');
+assert.ok(held.dangerous && held.warned, 'the proof shot is a frame that is both warned and dangerous');
+assert.ok(held.dealt === false, 'the proof shot cost no health');
+await shot('boss-slam-active');
 for (let i = 0; i < 400 && (await boss()).move !== null; i++) await step(6);
 
 const after = await page.evaluate(() => window.__trial);
