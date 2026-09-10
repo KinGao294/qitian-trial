@@ -1,7 +1,7 @@
 import * as T from 'three';
 import './style.css';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { WarriorRig, animateWarrior, type RootMotion } from './rig';
+import { WarriorRig, animateWarrior, curve, type Key, type RootMotion } from './rig';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `<div id="hud"><div class="top"><div class="brand">齐天试炼<small>THE PILGRIM · TRIAL OF EMBERS</small></div><div class="chapter">第一章 · 苍岚古寺<strong>山门余烬</strong><div class="line"></div><div style="margin-top:12px;font-size:10px">踏破迷障 · 棍定山河</div></div></div><div class="reticle"></div><div class="notice" id="notice"></div><div class="status"><label>行 者 <span id="hpText">100 / 100</span></label><div class="bar"><i id="hp"></i></div><div class="bar stamina"><i id="stamina"></i></div><div class="ult" id="ult">K 定海神针 · 就绪</div></div><div class="objective">击败镇山巨兽<br><span id="count">0</span> / 1<div style="color:#989f90;font-size:10px">红环踏地 / 橙锥喷火 · 闪避反击</div></div><div class="controls"><span><b>W A S D</b>移动</span><span><b>鼠标</b>视角</span><span><b>J / 左键</b>三段棍术</span><span><b>K</b>定海大招</span><span><b>空格</b>跳跃</span><span class="optional"><b>SHIFT</b>闪避</span><span class="optional"><b>ESC</b>暂停</span><button class="sound" id="sound">声音 · 开</button></div></div><div id="hurt"></div><div class="overlay" id="overlay"><div class="panel"><div class="eyebrow">AN ORIGINAL 3D ACTION EXPERIENCE</div><h1 id="title">齐天试炼</h1><div class="subtitle" id="subtitle">山 门 余 烬 <span class="seal">壹</span></div><p id="description">暮钟已寂，山寺犹燃。<br>执一根长棍，穿过苍岚与残垣。<br>挑战镇山巨兽，破除古寺封印。</p><button class="button" id="start">踏 入 山 门　→</button><div class="fine">WASD 移动 · 鼠标转向 · 连按 J：横扫破风 → 挑棍穿云 → 旋砸定山 · K 定海金光 · 巨兽会喷火 · Shift 闪避<br><br>Tripo 写实模型 + 原创场景 / 建议使用键盘与鼠标</div></div></div>`;
@@ -283,8 +283,19 @@ Promise.all([loadCharacter(player,'player',1.9),loadCharacter(enemies[0].mesh,'b
  artReady=true;startButton.disabled=false;startButton.textContent='踏 入 山 门　→';
 }).catch((err)=>{ console.error(err); artReady=true; startButton.disabled=false; startButton.textContent='踏 入 山 门　→'; showError(err); });
 const keys=new Set<string>();let touchMoveX=0,touchMoveY=0;let running=false,started=false,ended=false,paused=false,hp=100,stamina=100,yaw=0,pitch=.35,vy=0,grounded=true,attackT=0,combo=0,queued=false,lastAttack=-10,dodgeT=0,invulnerable=0,kills=0,time=0,hurt=0,noticeT=0,ultT=0,ultCd=0,ultHit=false;
-// Animation-only state: air time, landing recovery and hit flinch feed the pose layers.
-let airT=0,landT=0,flinchT=0,wasGrounded=true,ultBurst=false,footPhase=0;const hitSet=new Set<Enemy>();const velocity=new T.Vector3();// Gameplay roots use atan2 velocity; visual models apply the shared Tripo nose offset.
+// Animation-only state: air time, landing recovery, hit flinch and the recoil from the player's own
+// blow connecting all feed the pose layers.
+let airT=0,landT=0,flinchT=0,impactT=0,wasGrounded=true,ultBurst=false,ultFlash=false,footPhase=0;
+// 定海神针 staging: the golden halo winds up with the turn, hangs at the overhead beat, then
+// collapses into the plunge. Same keyed tracks as the body pose, so the light and the warrior
+// cannot drift apart.
+// One staff art, same beats as the body: wind back, hold, then accelerate through contact.
+const ATK_ARC:Key[]=[[0,0],[.29,-.12,'out'],[.36,-.12,'hold'],[.54,1,'in'],[.74,1.08,'out'],[1,1.12]];
+const ATK_FADE:Key[]=[[0,0],[.3,.1,'out'],[.37,.12,'hold'],[.5,1,'in'],[.7,.72,'out'],[1,0,'in']];
+const ULT_STAFF_SPIN:Key[]=[[0,0],[.18,-.3,'out'],[.26,-.3,'hold'],[.56,Math.PI*4,'in'],[.7,Math.PI*4.4,'out'],[1,Math.PI*4.6]];
+const ULT_STAFF_SCALE:Key[]=[[0,.5],[.3,.85,'out'],[.52,2,'in'],[.6,2.1,'hold'],[.72,1.1,'in'],[1,1.5,'out']];
+const ULT_STAFF_FADE:Key[]=[[0,0],[.3,.35,'out'],[.52,.85,'in'],[.62,.9,'hold'],[.86,.5,'linear'],[1,0,'in']];
+const ULT_STAFF_Y:Key[]=[[0,-.35],[.3,-.45,'out'],[.56,.85,'out'],[.64,.85,'hold'],[.78,-.1,'in'],[1,0,'out']];const hitSet=new Set<Enemy>();const velocity=new T.Vector3();// Gameplay roots use atan2 velocity; visual models apply the shared Tripo nose offset.
 player.rotation.y=0;let shake=0;let muted=false,audioCtx:AudioContext|undefined;
 function sound(freq:number,duration=.12,type:OscillatorType='sine',volume=.055){if(muted)return;try{audioCtx??=new AudioContext();const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();osc.type=type;osc.frequency.setValueAtTime(freq,audioCtx.currentTime);osc.frequency.exponentialRampToValueAtTime(Math.max(25,freq*.35),audioCtx.currentTime+duration);gain.gain.setValueAtTime(volume,audioCtx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+duration);osc.connect(gain).connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime+duration);}catch{}}
 function notice(text:string){if(el('notice')) el('notice')!.textContent=text;noticeT=2;}
@@ -316,7 +327,7 @@ window.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown'].include
 renderer.domElement.addEventListener('mousedown',e=>{if(e.button===0&&running){if(document.pointerLockElement!==renderer.domElement)renderer.domElement.requestPointerLock();startAttack();}});window.addEventListener('mousemove',e=>{if(document.pointerLockElement===renderer.domElement&&running){yaw-=e.movementX*.0025;pitch=T.MathUtils.clamp(pitch+e.movementY*.002,.05,.85);}});document.addEventListener('pointerlockchange',()=>{if(!coarse&&!document.pointerLockElement&&running)pause();});
 el('sound').onclick=()=>{muted=!muted;el('sound').textContent=`声音 · ${muted?'关':'开'}`;};
 function pause(){paused=true;running=false;keys.clear();el('overlay').classList.remove('hidden');el('title').textContent='暂歇片刻';el('subtitle').textContent='山 风 未 止';el('description').innerHTML='旅途仍在继续。<br>调整呼吸，再赴试炼。';el('start').textContent='继 续 试 炼　→';if(document.pointerLockElement)document.exitPointerLock();}
-function reset(){hp=100;stamina=100;kills=0;vy=0;attackT=0;queued=false;combo=0;lastAttack=-10;dodgeT=0;invulnerable=0;ultT=0;ultCd=0;ultHit=false;ultBurst=false;grounded=true;hurt=0;airT=0;landT=0;flinchT=0;wasGrounded=true;keys.clear();player.position.set(0,0,12);player.rotation.set(0,0,0);yaw=0;pitch=.35;for(const e of enemies){e.hp=e.max;e.dead=false;e.mesh.visible=true;e.mesh.position.copy(e.home);e.mesh.rotation.set(0,0,0);e.cool=1.5;e.wind=0;e.fireT=0;e.pattern=0;e.atk=null;e.step=0;const bv=e.mesh.userData.visual as T.Group|undefined;if(bv){bv.position.y=0;bv.rotation.set(0,0,0);bv.scale.set(1,1,1);}}for(const d of drops)scene.remove(d);drops.length=0;ended=false;}
+function reset(){hp=100;stamina=100;kills=0;vy=0;attackT=0;queued=false;combo=0;lastAttack=-10;dodgeT=0;invulnerable=0;ultT=0;ultCd=0;ultHit=false;ultBurst=false;ultFlash=false;grounded=true;hurt=0;airT=0;landT=0;flinchT=0;impactT=0;wasGrounded=true;keys.clear();player.position.set(0,0,12);player.rotation.set(0,0,0);yaw=0;pitch=.35;for(const e of enemies){e.hp=e.max;e.dead=false;e.mesh.visible=true;e.mesh.position.copy(e.home);e.mesh.rotation.set(0,0,0);e.cool=1.5;e.wind=0;e.fireT=0;e.pattern=0;e.atk=null;e.step=0;const bv=e.mesh.userData.visual as T.Group|undefined;if(bv){bv.position.y=0;bv.rotation.set(0,0,0);bv.scale.set(1,1,1);}}for(const d of drops)scene.remove(d);drops.length=0;ended=false;}
 el('start')?.addEventListener('click',()=>{if(!artReady)return;if(ended)reset();started=true;paused=false;running=true;el('overlay').classList.add('hidden');if(!coarse)renderer.domElement.requestPointerLock();sound(330,.25);notice('苍岚古寺 · 挑战镇山巨兽');});
 function finish(win:boolean){ended=true;running=false;el('title').textContent=win?'试炼已成':'再起一程';el('subtitle').textContent=win?'一 棍 破 迷 障':'胜 负 仍 未 定';el('description').innerHTML=win?'石狮封印已破，古寺重归寂静。<br>你的长棍，已留下新的传说。':`已击破 ${kills} / 1 名守卫。<br>敌人蓄力时会亮起红环，闪避可避开伤害。<br>击败守卫后拾取金色灵息，恢复生命。`;el('start').textContent='再 入 山 门　↻';el('overlay').classList.remove('hidden');document.exitPointerLock();}
 // `tick` lets an effect drive itself (flicker, sweep, expand) instead of needing a bespoke system.
@@ -435,6 +446,79 @@ function cracks(pos:T.Vector3,radius:number,n=7,color='#ff9d52'){
   fx(mesh,.45+rand()*.3,{tick:(e,age)=>{e.mesh.scale.x=Math.min(1,age*3.2);}});
  }
 }
+/**
+ * Ring of compressed air, expanding on a plane that faces `dir`. Reads as a pressure wave rather
+ * than a sprite, so it works both as an impact confirm and as the tell on a heavy wind-up.
+ */
+function airRing(pos:T.Vector3,dir:T.Vector3,radius:number,life:number,color='#ffe6b4',alpha=.55,thickness=.055,inward=false){
+ const mesh=new T.Mesh(new T.TorusGeometry(1,thickness,4,30),additive(color,alpha));
+ mesh.position.copy(pos);
+ mesh.quaternion.setFromUnitVectors(new T.Vector3(0,0,1),dir.clone().normalize());
+ scene.add(mesh);
+ fx(mesh,life,{tick:(e,age)=>{
+  // Outward is an impact; inward is something drawing breath. Same ring, read in reverse.
+  const s=inward?radius*(1-.88*age):radius*(.18+.82*Math.sqrt(age));
+  e.mesh.scale.set(s,s,1-.6*age);
+ }});
+}
+/**
+ * A ring collapsing into the boss's muzzle: air being drawn in before it breathes fire. Parented to
+ * the mouth anchor, so it stays on the muzzle through the turn; inside `TripoOrient` the nose is
+ * local +X, which is the axis the ring has to face.
+ */
+function inhaleRing(mouth:T.Object3D,radius:number,life:number){
+ const mesh=new T.Mesh(new T.TorusGeometry(1,.05,4,26),additive('#ffb066',.5));
+ mesh.quaternion.setFromUnitVectors(new T.Vector3(0,0,1),new T.Vector3(1,0,0));
+ mesh.position.x=radius*.5;
+ mouth.add(mesh);
+ fx(mesh,life,{tick:(e,age)=>{const s=radius*(1-.88*age);e.mesh.scale.set(s,s,1);e.mesh.position.x=radius*.5*(1-age);}});
+}
+/**
+ * Hit confirm for the staff landing on something: a flat bloom across the strike line plus a couple
+ * of streaks thrown along it. Short, so it punctuates the hitstop instead of smearing over it.
+ */
+function impactBloom(pos:T.Vector3,dir:T.Vector3,tier=0){
+ const flat=dir.clone().setY(0);if(flat.lengthSq()<1e-6)flat.set(0,0,1);flat.normalize();
+ airRing(pos,flat,1.5+tier*.55,.2+tier*.04,tier===2?'#ffc470':'#ffe6b4',.6,.05+tier*.02);
+ const core=new T.Mesh(new T.SphereGeometry(.24+tier*.06,10,8),additive('#fff2cf',.7));
+ core.position.copy(pos);scene.add(core);
+ fx(core,.11,{tick:(e,age)=>e.mesh.scale.setScalar(1+age*2.6)});
+ for(let i=0;i<2+tier;i++){
+  const side=flat.clone().applyAxisAngle(new T.Vector3(0,1,0),(rand()-.5)*1.5);
+  beam(pos.clone().add(new T.Vector3(0,(rand()-.5)*.4,0)),side,1.1+rand()*1.1,'#ffe0a0',.13,.035);
+ }
+}
+/**
+ * Grit peeled off the flagstones and dragged upward. Spawned while something heavy is still on its
+ * way down, so the ground answers the blow before it lands — the cue that reads as "move now".
+ */
+/**
+ * Embers pulled inward to a point and swallowed. The opposite gesture to every other effect here,
+ * which is exactly why it reads as gathering rather than as another explosion.
+ */
+function convergeMotes(pos:T.Vector3,n:number,radius:number,life:number,color='#ffe0a0'){
+ for(let i=0;i<n;i++){
+  const a=rand()*Math.PI*2,r=radius*(.6+rand()*.5),h=.3+rand()*2.2;
+  const m=new T.MeshBasicMaterial({color,transparent:true,opacity:.9,depthWrite:false,blending:T.AdditiveBlending});
+  const mesh=sphere(.045+rand()*.045,m,pos.x+Math.cos(a)*r,pos.y+h,pos.z+Math.sin(a)*r,scene);
+  const from=mesh.position.clone(),to=pos.clone().add(new T.Vector3(0,1.15,0));
+  const span=life*(.7+rand()*.5);
+  fx(mesh,span,{tick:(fxe,age)=>{
+   // Accelerating in, so the gather tightens rather than drifting: the pull is getting stronger.
+   const t=Math.min(1,age*age*1.15);
+   fxe.mesh.position.lerpVectors(from,to,t);
+   fxe.mesh.scale.setScalar(1+t*.8);
+  }});
+ }
+}
+function gritRise(pos:T.Vector3,n:number,spread:number,color='#a2988a'){
+ for(let i=0;i<n;i++){
+  const a=rand()*Math.PI*2,r=spread*(.35+rand()*.65);
+  const m=new T.MeshStandardMaterial({color,roughness:1,transparent:true,opacity:.4});
+  const mesh=sphere(.045+rand()*.05,m,pos.x+Math.cos(a)*r,pos.y+.05,pos.z+Math.sin(a)*r,scene);
+  fx(mesh,.3+rand()*.28,{vy:1.6+rand()*1.9,vx:Math.cos(a)*.35,vz:Math.sin(a)*.35,grow:.5});
+ }
+}
 // Rising column of light for the ultimate: a stack of additive shells that flare and lift.
 function pillar(pos:T.Vector3,color:string,radius:number,height:number,life=.7,glow=12){
  const g=new T.Group();g.position.copy(pos);scene.add(g);
@@ -495,6 +579,27 @@ const swing=new T.Mesh(new T.TorusGeometry(1.9,.045,5,45,Math.PI*1.3),new T.Mesh
 const yawDir=(yaw:number)=>new T.Vector3(Math.sin(yaw),0,Math.cos(yaw));
 const ease=(x:number)=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
 const bossVisual=(e:Enemy)=>e.mesh.userData.visual as T.Group;
+// Body-motion tracks, shared with the player rig's keyed-track sampler so the boss reads on the
+// same timing vocabulary: `out` decelerates into a beat, `hold` freezes on it, `in` accelerates off
+// it. A single ramp per phase is what made this sculpt read as a prop being tilted; the extra beats
+// are the load, the haul and the still frame the player actually reads the telegraph off.
+//
+// Every track is normalised over its own phase (0..1 of wind / strike / recover) so retuning a
+// duration in `BOSS_MOVES` cannot desynchronise the motion from the telegraph it belongs to.
+const SLAM_REAR:Key[]=[[0,0],[.16,-.24,'out'],[.62,1,'out'],[.8,1,'hold'],[1,1.05,'linear']];
+const SLAM_LOAD:Key[]=[[0,0],[.16,1,'out'],[.46,0,'in'],[1,0]];
+const SWIPE_COIL:Key[]=[[0,0],[.14,-.18,'out'],[.66,1,'out'],[.84,1,'hold'],[1,1.04,'linear']];
+const SWIPE_WHIP:Key[]=[[0,0],[.1,-.06,'out'],[.52,1.08,'in'],[.72,1,'out'],[1,.97]];
+// Recovery holds the overswing for a beat before hauling the body square, and drops through a dip
+// on the way: the claw's own momentum has to be paid for before the boss is ready again.
+const SWIPE_SETTLE:Key[]=[[0,0],[.24,.2,'out'],[1,1,'out']];
+const SWIPE_SINK:Key[]=[[0,0],[.3,1,'out'],[1,0,'in']];
+const FIRE_DRAW:Key[]=[[0,0],[.22,-.3,'out'],[.72,1,'out'],[.86,1,'hold'],[1,1.06,'linear']];
+const FIRE_SWELL:Key[]=[[0,0],[.24,.15,'out'],[.78,1,'linear'],[1,1]];
+const FIRE_RECOIL:Key[]=[[0,1],[.14,.12,'out'],[.34,0,'out'],[1,0]];
+// Lumber: the mass drops onto the planted foot fast and is hauled back up slowly.
+const BOSS_GAIT_Y:Key[]=[[0,0],[.12,-.05,'in'],[.36,.07,'out'],[.62,.19,'out'],[.86,.11,'linear'],[1,0]];
+const BOSS_GAIT_X:Key[]=[[0,.07],[.16,.1,'out'],[.52,-.07,'out'],[1,.07]];
 function turnToward(e:Enemy,diff:T.Vector3,step:number){
  const want=Math.atan2(diff.x,diff.z);
  const delta=((want-e.mesh.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
@@ -541,14 +646,28 @@ function aimSlam(e:Enemy,a:BossAtk){
 function bossSlam(e:Enemy,a:BossAtk,dt:number,diff:T.Vector3){
  const S=BOSS_MOVES.slam,vis=bossVisual(e);
  if(a.t<S.wind){
-  // Rear back and rise: the wind-up is what makes the drop feel heavy.
-  const u=ease(a.t/S.wind);
+  // Three beats instead of one ramp: sink into the load, haul the mass up and back, then *hold* at
+  // the top. The hold is the still frame the player reads the ring off, and it is what the drop
+  // breaks — a body that is still accelerating upward when the palm falls has nothing to fall from.
+  const u=a.t/S.wind;
   turnToward(e,diff,1.5*dt);
   aimSlam(e,a);
-  vis.rotation.x=-.34*u;vis.position.y=.44*u;vis.scale.set(1-.04*u,1+.08*u,1-.04*u);
+  const rear=curve(u,SLAM_REAR),load=curve(u,SLAM_LOAD);
+  vis.rotation.x=-.4*rear+.12*load;
+  vis.position.y=.5*rear-.13*load;
+  const squash=.05*rear-.05*load;
+  vis.scale.set(1-squash,1+squash*2,1-squash);
+  // Ground zero starts shedding grit while the palm is still up: the floor answers first.
+  if(u>.62&&Math.random()<.3)gritRise(a.center,1,S.radius*.55);
  }else if(a.t<S.wind+S.strike){
-  const k=((a.t-S.wind)/S.strike)**2;
-  vis.rotation.x=-.34+.92*k;vis.position.y=.44-.52*k;vis.scale.set(1+.11*k,1-.1*k,1+.11*k);
+  const k=(a.t-S.wind)/S.strike;
+  // Cubed, not squared: the palm is still gaining speed on the frame it arrives, which is what
+  // makes the stop read as an impact rather than as the end of an animation.
+  const fall=k*k*k;
+  vis.rotation.x=-.4+1.08*fall;vis.position.y=.5-.62*fall;
+  vis.scale.set(1+.13*fall,1-.13*fall,1+.13*fall);
+  shake=Math.max(shake,.07*fall);
+  if(Math.random()<.55)gritRise(a.center,1,S.radius*(.45+.35*fall));
  }else{
   if(!a.hit){
    a.hit=true;
@@ -567,26 +686,44 @@ function bossSlam(e:Enemy,a:BossAtk,dt:number,diff:T.Vector3){
 function bossSwipe(e:Enemy,a:BossAtk,dt:number,diff:T.Vector3){
  const S=BOSS_MOVES.swipe,vis=bossVisual(e);
  if(a.t<S.wind){
-  const u=ease(a.t/S.wind);
+  const u=a.t/S.wind;
   turnToward(e,diff,1.7*dt);
   if(a.tele){a.tele.position.set(e.mesh.position.x,.05,e.mesh.position.z);a.tele.rotation.y=e.mesh.rotation.y;}
-  vis.rotation.y=-.6*u;vis.rotation.x=-.16*u;vis.position.y=.14*u;
+  // Coil against the swing, shift the weight onto the far shoulder, then hold wound. The counter
+  // twist at the start is small but it is what tells the eye which way the claw is about to travel.
+  const coil=curve(u,SWIPE_COIL);
+  vis.rotation.y=-.72*coil;vis.rotation.x=-.18*coil;vis.rotation.z=.13*coil;
+  vis.position.y=.16*coil;
+  vis.scale.set(1+.03*coil,1-.02*coil,1+.03*coil);
+  if(u>.66&&Math.random()<.14)dust(e.mesh.position.clone().add(yawDir(e.mesh.rotation.y+1.4).multiplyScalar(1.3)),2,'#8e8677',1.2,.5,1.3);
  }else if(a.t<S.wind+S.strike){
-  const u=(a.t-S.wind)/S.strike,k=Math.min(1,u*1.5)**.7;
-  vis.rotation.y=-.6+1.55*k;vis.rotation.x=-.16+.24*k;vis.position.y=.14*(1-k);
+  const u=(a.t-S.wind)/S.strike,k=curve(u,SWIPE_WHIP);
+  // Accelerate through the arc and overshoot slightly past the finish, so the claw is carried by
+  // its own weight rather than parked on the last keyframe.
+  vis.rotation.y=-.72+1.72*k;vis.rotation.x=-.18+.28*k;vis.rotation.z=.13*(1-k)-.08*k;
+  vis.position.y=.16*(1-k);
+  vis.scale.set(1-.03*k,1+.02*k,1-.03*k);
   if(!a.hit&&u>.32){
    a.hit=true;
    const face=yawDir(e.mesh.rotation.y);
    clawArc(e.mesh.position.clone().add(face.clone().multiplyScalar(.9)),e.mesh.rotation.y,S.radius*.82,S.arc);
    dust(e.mesh.position.clone().add(face.clone().multiplyScalar(S.radius*.5)),8,'#98907f',S.radius,1.1,1.5);
+   // The pressure wave across the sweep line is the confirm: it lands on the same frame the hit
+   // test runs, so the flash on screen and the damage are the same event.
+   airRing(e.mesh.position.clone().add(face.clone().multiplyScalar(1.6)).setY(1.9),face,S.radius*.7,.26,'#ffb277',.5,.09);
+   gritRise(e.mesh.position.clone().add(face.clone().multiplyScalar(S.radius*.45)),5,S.radius*.5);
    shake=Math.max(shake,.26);sound(72,.24,'sawtooth',.05);
    const off=player.position.clone().sub(e.mesh.position);off.y=0;
    const reach=Math.hypot(off.x,off.z);
    if(reach<S.radius&&off.normalize().dot(face)>Math.cos(S.arc/2)&&invulnerable<=0){hitstop=.04;hurtPlayer(S.damage,'#cf5a34');}
   }
  }else{
-  const u=ease(Math.min(1,(a.t-S.wind-S.strike)/S.recover));
-  vis.rotation.y=.95*(1-u);vis.rotation.x=.08*(1-u);
+  // Recovery is its own beat: the overswing drags the body round, then it hauls itself back square.
+  const u=Math.min(1,(a.t-S.wind-S.strike)/S.recover);
+  const settleBack=curve(u,SWIPE_SETTLE);
+  vis.rotation.y=.95*(1-settleBack);vis.rotation.x=.1*(1-settleBack);vis.rotation.z=-.08*(1-settleBack);
+  vis.position.y=-.05*curve(u,SWIPE_SINK);
+  vis.scale.set(1,1,1);
   if(a.t>=S.wind+S.strike+S.recover)endBossMove(e,2);
  }
 }
@@ -595,10 +732,19 @@ function bossFire(e:Enemy,a:BossAtk,dt:number,diff:T.Vector3){
  const mouth=e.mesh.userData.mouth as T.Object3D|undefined;
  const origin=mouth?mouth.getWorldPosition(new T.Vector3()):e.mesh.position.clone().add(new T.Vector3(0,2.6,0));
  if(a.t<F.wind){
-  const u=ease(a.t/F.wind);
+  const u=a.t/F.wind;
   turnToward(e,diff,F.turn*dt);
   if(a.tele){a.tele.position.set(e.mesh.position.x,.05,e.mesh.position.z);a.tele.rotation.y=e.mesh.rotation.y;}
-  vis.rotation.x=-.32*u;vis.position.y=.18*u;vis.scale.set(1-.03*u,1+.05*u,1-.03*u);
+  // The tell is a breath being taken, in three beats: a short drop as the chest empties, a long
+  // haul up and back as it fills, then a held tremor with the jaw loaded. Rings of air collapsing
+  // into the muzzle make the intake visible from behind the boss, where the mouth glow is not.
+  const draw=curve(u,FIRE_DRAW),swell=curve(u,FIRE_SWELL);
+  const tremor=u>.82?Math.sin(a.t*70)*.012:0;
+  vis.rotation.x=-.4*draw+tremor;
+  vis.position.y=.22*draw;
+  vis.scale.set(1-.04*swell,1+.055*swell,1+.05*swell);
+  if(mouth&&u<.9&&Math.random()<.1)inhaleRing(mouth,.55+rand()*.5,.34);
+  if(u>.8)shake=Math.max(shake,.035*(u-.8)/.2);
  }else if(a.t<F.wind+F.strike){
   // Head snaps down and the jet erupts. Horizontal aim is the (slow) body turn, so sidestepping
   // works; the vertical aim tracks the chest so the flame visibly washes over the player.
@@ -616,12 +762,22 @@ function bossFire(e:Enemy,a:BossAtk,dt:number,diff:T.Vector3){
     const wob=1+Math.sin(age*90)*.05;
     jet.layers.forEach((l,i)=>l.scale.set(wob+(i%2?.04:-.03),1,wob));
    }});
+   // One pressure ring blown off the muzzle on the frame the breath breaks: the punctuation the
+   // eruption was missing, and the cue that the wind-up window has just closed.
+   airRing(origin.clone(),a.dir,2.7,.3,'#ffbe7a',.6,.1);
+   shake=Math.max(shake,.26);sound(96,.3,'sawtooth',.05);
   }
   a.jet.group.position.copy(origin);
   a.jet.group.quaternion.setFromUnitVectors(new T.Vector3(0,0,1),a.dir);
-  vis.rotation.x=.1+Math.sin(a.t*44)*.025;vis.position.y=.04;vis.scale.set(1,1,1);
+  // Eruption: the head is thrown back by its own jet, then the recoil bleeds off into the sustained
+  // rumble of holding the breath out. Without that first kick the flame just switches on.
+  const k=(a.t-F.wind)/F.strike;
+  const recoil=curve(k,FIRE_RECOIL);
+  vis.rotation.x=.12-.34*recoil+Math.sin(a.t*44)*(.022+.03*recoil);
+  vis.position.y=.04+.14*recoil;
+  vis.scale.set(1+.05*recoil,1-.05*recoil,1-.03*recoil);
   if(Math.random()<.5)sparks(origin.clone().add(a.dir.clone().multiplyScalar(1.5+rand()*F.range*.8)),1,'#ffab52');
-  shake=Math.max(shake,.05);
+  shake=Math.max(shake,.05+.18*recoil);
   // Hit test is the drawn cone: apex at the muzzle, widening to `range * tan(half)`.
   const off=player.position.clone().add(new T.Vector3(0,.9,0)).sub(origin);
   const along=off.dot(a.dir);
@@ -658,12 +814,16 @@ function updateBoss(e:Enemy,dt:number,diff:T.Vector3,dist:number){
   const step=diff.clone();step.y=0;step.normalize();
   moveBody(e.mesh,step.x*dt*2.6,step.z*dt*2.6);
   const before=e.step;e.step+=dt*2.6;
-  vis.position.y=Math.abs(Math.sin(e.step))*.2;
-  vis.rotation.x=-.05+Math.sin(e.step)*.05;
-  vis.rotation.z=Math.sin(e.step*.5)*.06;
+  // Lumber, not bounce: `|sin|` rises and falls at the same rate, which reads weightless. The mass
+  // slams onto the planted foot and is then hauled back up over the rest of the step.
+  const gait=(e.step/Math.PI)%1;
+  vis.position.y=curve(gait,BOSS_GAIT_Y);
+  vis.rotation.x=-.05+curve(gait,BOSS_GAIT_X);
+  vis.rotation.z=Math.sin(e.step*.5)*.075;
   // Dust on every footfall: a static sculpt still reads as heavy when the ground answers back.
   if(Math.floor(e.step/Math.PI)!==Math.floor(before/Math.PI)){
    dust(e.mesh.position.clone().add(step.clone().multiplyScalar(1.2)),5,'#8e8677',2.4,1.1,1.7);
+   gritRise(e.mesh.position.clone().add(step.clone().multiplyScalar(1.1)),3,1.5);
    sound(46,.16,'sine',.035);shake=Math.max(shake,.05);
   }
  }else{
@@ -685,35 +845,63 @@ player.userData.movePose=T.MathUtils.damp(player.userData.movePose,moving?1:0,10
 if(mixerActive){ const w=moving?1:0; locoActions.walk?.setEffectiveWeight(w); locoActions.idle?.setEffectiveWeight(1-w); }
 // Touchdown: crouch recovery plus a puff of grit, so a jump ends on something physical.
 if(grounded&&!wasGrounded&&airT>.12){landT=LAND_DUR;dust(player.position,6,'#9aa093',1.1,.75,1);sound(115,.12,'sine',.045);shake=Math.max(shake,.07);}
-wasGrounded=grounded;airT=grounded?0:airT+dt;landT=Math.max(0,landT-dt);flinchT=Math.max(0,flinchT-dt);
+wasGrounded=grounded;airT=grounded?0:airT+dt;landT=Math.max(0,landT-dt);flinchT=Math.max(0,flinchT-dt);impactT=Math.max(0,impactT-dt);
 player.userData.torso.rotation.z=dodgeT>0?-0.2:0;
 if(ultT>0){
  ultT-=dt;
  const p=1-Math.max(ultT,0)/ULT_DUR;
  const facing=new T.Vector3(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));
  const origin=player.position.clone().add(new T.Vector3(0,1.25,0));
- if(p<.85){
-  beam(origin,facing,7.5,'#ffe7a0',.12,.12);
-  beam(origin,facing.clone().add(new T.Vector3(0,0.08,0)).normalize(),6.8,'#fff3c4',.1,.05);
-  if(Math.random()<.4)sparks(origin.clone().add(facing.clone().multiplyScalar(2+rand()*4)),2,'#ffe29a');
+ // The ultimate is staged on the same beats the body is posed to (see `poseUltimate`), so the light
+ // and the warrior are telling one story: gather low → one committed turn → a still frame with the
+ // staff overhead → the plunge. Every stage is drawn with different geometry, so the eye can tell
+ // which beat it is looking at even mid-turn.
+ if(p<.32){
+  // Gather. Everything moves *inward*, which is the one gesture nothing else in the game makes.
+  if(Math.random()<.55)convergeMotes(player.position,3,3.2-p*4,.34);
+  if(Math.random()<.3)airRing(origin,new T.Vector3(0,1,0),2.6-p*3,.3,'#ffd88c',.4,.05,true);
+  shake=Math.max(shake,.05+p*.32);
+ }else if(p<.6){
+  // The turn. Trails rake outward from the spin instead of pointing down the strike line.
+  const bladeYaw=player.rotation.y-p*Math.PI*4;
+  beam(origin,yawDir(bladeYaw),2.9,'#ffe7a0',.16,.075);
+  if(Math.random()<.5)sparks(origin.clone().add(yawDir(bladeYaw).multiplyScalar(1.4+rand()*1.4)),1,'#fff0c0');
+  shake=Math.max(shake,.14);
+ }
+ // Apex: the staff is overhead and the world holds still for a beat. The freeze is short enough to
+ // read as weight rather than as a stutter, and it is what the plunge is measured against.
+ if(p>.52&&!ultFlash){
+  ultFlash=true;
+  airRing(origin.clone().add(new T.Vector3(0,.9,0)),new T.Vector3(0,1,0),3.4,.3,'#fff3cf',.7,.07);
+  pillar(player.position,'#ffe9b4',.55,6.2,.42,5);
+  sound(700,.22,'triangle',.045);hitstop=.045;
  }
  // The moment the staff lands: golden shockwave down the strike line, flagstones splitting open.
- if(p>.42&&!ultBurst){
+ if(p>.68&&!ultBurst){
   ultBurst=true;
   const impact=player.position.clone().add(facing.clone().multiplyScalar(3.4));
   shockwave(player.position,8.6,'#ffce7c',.5,.42);
   groundFan(player.position,player.rotation.y,8.5,1.5,'#ffd98a',.45,false);
   cracks(impact,5.5,9,'#ffcf7a');
   dust(impact,10,'#b3a68c',2.4,1.3,2);
+  gritRise(impact,9,3.2,'#bcae94');
+  airRing(origin,facing,5.4,.34,'#ffe0a0',.55,.11);
   // The strike lands where the boss stands, so this column stays dim — a bright one blows the
   // silhouette out to white and the player loses track of what they are hitting.
   pillar(impact,'#ffdf9e',1.1,5.4,.6,7);
   sound(58,.4,'sawtooth',.06);
-  shake=Math.max(shake,.34);hitstop=.06;
+  shake=Math.max(shake,.34);hitstop=.07;impactT=.16;
  }
- swing.visible=true;swing.scale.setScalar(1.6);swing.position.copy(player.position).add(new T.Vector3(0,1.3,0));
- swing.rotation.z=player.rotation.y-p*Math.PI*2;(swing.material as T.MeshBasicMaterial).color.set('#ffdc96');
- (swing.material as T.MeshBasicMaterial).opacity=Math.sin(p*Math.PI)*.72;
+ if(p>.62&&p<.92){
+  beam(origin,facing,7.5,'#ffe7a0',.12,.12);
+  beam(origin,facing.clone().add(new T.Vector3(0,0.08,0)).normalize(),6.8,'#fff3c4',.1,.05);
+  if(Math.random()<.4)sparks(origin.clone().add(facing.clone().multiplyScalar(2+rand()*4)),2,'#ffe29a');
+ }
+ swing.visible=true;swing.position.copy(player.position).add(new T.Vector3(0,1.3+curve(p,ULT_STAFF_Y),0));
+ // The halo winds up with the turn, hangs at the apex, then collapses into the plunge.
+ swing.scale.setScalar(curve(p,ULT_STAFF_SCALE));
+ swing.rotation.z=player.rotation.y-curve(p,ULT_STAFF_SPIN);(swing.material as T.MeshBasicMaterial).color.set('#ffdc96');
+ (swing.material as T.MeshBasicMaterial).opacity=curve(p,ULT_STAFF_FADE);
  if(p>.18&&p<.9){
   for(const e of enemies){
    if(e.dead)continue;
@@ -727,7 +915,7 @@ if(ultT>0){
   }
   ultHit=true;
  }
- if(ultT<=0){swing.visible=false;hitSet.clear();ultBurst=false;}
+ if(ultT<=0){swing.visible=false;hitSet.clear();ultBurst=false;ultFlash=false;}
 }else if(attackT>0){
  attackT-=dt;
  const dur=ATTACK_DUR[combo];
@@ -737,13 +925,18 @@ if(ultT>0){
  if(target){const diff=target.mesh.position.clone().sub(player.position);player.rotation.y=Math.atan2(diff.x,diff.z);}
  // Three staff arts: sweep / lift / spinning slam. The body pose comes from the skeleton animation;
  // this block owns the arcs, the trails and the hit window.
- if(Math.floor(p*12)%3===0)staffSlashTrail(player.position,player.rotation.y,combo);
+ // Trails belong to the strike, not to the whole move. Smearing them across the wind-up as well is
+ // what made three different arts read as one continuous glow with no moment of contact in it.
+ if(p>.35&&p<.74&&Math.floor(p*22)%2===0)staffSlashTrail(player.position,player.rotation.y,combo);
+ if(p>.18&&p<.32&&grounded&&Math.random()<.3)dust(player.position,1,'#9d968a',.7,.4,.6);
  swing.visible=true;
  swing.scale.setScalar(combo===2?1.35:1);
  swing.position.copy(player.position).add(new T.Vector3(0,1.15+combo*0.08,0));
- swing.rotation.z=player.rotation.y-(combo===2?p*Math.PI*2:p*(combo===0?4.2:2.6));
+ // The halo sweeps on the same accelerating track the arm does, so the arc visibly speeds up into
+ // contact instead of coasting round at a constant rate.
+ swing.rotation.z=player.rotation.y-curve(p,ATK_ARC)*(combo===2?Math.PI*2:(combo===0?4.2:2.6));
  (swing.material as T.MeshBasicMaterial).color.set(combo===2?'#ffd28a':'#ffe0a0');
- (swing.material as T.MeshBasicMaterial).opacity=Math.sin(p*Math.PI)*(combo===2?.85:.65);
+ (swing.material as T.MeshBasicMaterial).opacity=curve(p,ATK_FADE)*(combo===2?.85:.65);
  const hitStart=combo===2?.2:.25, hitEnd=combo===2?.88:.8;
  const reach=combo===2?4.4:combo===1?3.6:3.9;
  const dmg=combo===2?48:combo===1?32:27;
@@ -753,7 +946,10 @@ if(ultT>0){
   const dist=Math.hypot(diff.x,diff.z);
   const facing=new T.Vector3(Math.sin(player.rotation.y),0,Math.cos(player.rotation.y));
   if(dist<(e.boss?reach+.4:reach)&&Math.abs(diff.y)<2.6&&diff.normalize().dot(facing)>-.2){
-   hitSet.add(e);e.hp-=dmg;hitstop=.05;shake=Math.max(shake,.16);sparks(e.mesh.position);ring(e.mesh.position,combo===2?'#ffb454':'#dfb16a',combo===2?1.45:1,.28);
+   // Heavier links in the combo hold the freeze a little longer, and `impactT` feeds the body the
+   // recoil of its own blow — a strike that stops the staff but not the warrior has no weight.
+   hitSet.add(e);e.hp-=dmg;hitstop=.045+combo*.015;impactT=.1+combo*.03;shake=Math.max(shake,.16+combo*.04);sparks(e.mesh.position);ring(e.mesh.position,combo===2?'#ffb454':'#dfb16a',combo===2?1.45:1,.28);
+   impactBloom(e.mesh.position.clone().add(new T.Vector3(0,1.1+combo*.15,0)),facing,combo);
    sound(95-combo*8,.15,'sawtooth',.04);
    moveBody(e.mesh,diff.x*(.28+combo*.12),diff.z*(.28+combo*.12));
    if(!e.boss){e.wind=0;e.cool=.55;}
@@ -810,7 +1006,7 @@ function animatePlayer(dt:number){
   attackP:attackT>0?1-attackT/ATTACK_DUR[combo]:-1,
   ultP:ultT>0?1-ultT/ULT_DUR:-1,
   dodgeP:dodgeT>0?1-dodgeT/DODGE_DUR:-1,
-  flinch:flinchT,
+  flinch:flinchT,impact:impactT,
  });
  vis.position.y=rootMotion.bob;
  vis.rotation.set(rootMotion.pitch,rootMotion.spin,rootMotion.roll);
