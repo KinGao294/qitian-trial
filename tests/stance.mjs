@@ -20,24 +20,29 @@ console.log('\nstance', JSON.stringify({ ...stance, boneNames: undefined }, null
 assert.equal(stance.legs.length, 2, 'both legs resolved from the Tripo bone tree');
 const height = stance.bodyMaxY - stance.bodyMinY;
 
-// Feet on ground: the visible body must sit on the floor, never hang above it.
-assert.ok(Math.abs(stance.bodyMinY - stance.floorY) < height * 0.05,
-  `body sole ${stance.bodyMinY.toFixed(3)} should rest on floor ${stance.floorY.toFixed(3)}`);
+// The idle animation layers on top of this bind pose, so the grounding has to survive it: check the
+// stance as loaded, then again after a couple of seconds of idle animation.
+function checkStanding(s, when) {
+  // Feet on ground: the visible body must sit on the floor, never hang above it.
+  assert.ok(Math.abs(s.bodyMinY - s.floorY) < height * 0.05,
+    `${when}: body sole ${s.bodyMinY.toFixed(3)} should rest on floor ${s.floorY.toFixed(3)}`);
 
-for (const leg of stance.legs) {
-  const label = leg.names.join(' / ');
-  // Upright: hip above knee above ankle, and the leg line aimed at the floor.
-  assert.ok(leg.hipY > leg.kneeY + height * 0.05, `${label}: hip above knee`);
-  assert.ok(leg.kneeY > leg.ankleY + height * 0.05, `${label}: knee above ankle`);
-  assert.ok(leg.uprightness > 0.95, `${label}: leg points down (got ${leg.uprightness.toFixed(3)})`);
-  // Grounded: the foot bone sits within a shoe's thickness of the floor.
-  assert.ok(Math.abs(leg.toeY - stance.floorY) < height * 0.06,
-    `${label}: toe ${leg.toeY.toFixed(3)} near floor ${stance.floorY.toFixed(3)}`);
+  for (const leg of s.legs) {
+    const label = `${when}: ${leg.names.join(' / ')}`;
+    // Upright: hip above knee above ankle, and the leg line aimed at the floor.
+    assert.ok(leg.hipY > leg.kneeY + height * 0.05, `${label}: hip above knee`);
+    assert.ok(leg.kneeY > leg.ankleY + height * 0.05, `${label}: knee above ankle`);
+    assert.ok(leg.uprightness > 0.95, `${label}: leg points down (got ${leg.uprightness.toFixed(3)})`);
+    // Grounded: the foot bone sits within a shoe's thickness of the floor.
+    assert.ok(Math.abs(leg.toeY - s.floorY) < height * 0.06,
+      `${label}: toe ${leg.toeY.toFixed(3)} near floor ${s.floorY.toFixed(3)}`);
+  }
+
+  // Both feet share the floor rather than one dangling.
+  const toes = s.legs.map(l => l.toeY);
+  assert.ok(Math.abs(toes[0] - toes[1]) < height * 0.03, `${when}: feet level with each other`);
 }
-
-// Both feet share the floor rather than one dangling.
-const toes = stance.legs.map(l => l.toeY);
-assert.ok(Math.abs(toes[0] - toes[1]) < height * 0.03, 'feet level with each other');
+checkStanding(stance, 'on load');
 
 // The GLB stores `tripo::0_Left_Limb_0`, but GLTFLoader passes every node name through
 // PropertyBinding.sanitizeNodeName, whose reserved set ('\\[\\]\\.:\\/') deletes ':'. So a matcher
@@ -56,6 +61,16 @@ for (const names of [...stance.legs, ...stance.arms].map(p => p.names)) {
 assert.equal(stance.arms.length, 2, 'both arms resolved');
 for (const arm of stance.arms) {
   assert.ok(arm.drop > 0.35, `${arm.names.join(' > ')}: arm hangs below horizontal (got ${arm.drop.toFixed(3)})`);
+}
+
+// Two seconds of breathing later, the warrior must still be standing on his own feet. Stepping the
+// simulation directly keeps this honest on software renderers, which draw about one frame a second.
+await page.evaluate(() => window.__trial.step(140, 1 / 60));
+const settled = await page.evaluate(() => window.__trial.stance());
+console.log('\nafter 2s of idle animation', JSON.stringify({ bodyMinY: settled.bodyMinY, toes: settled.legs.map(l => l.toeY) }));
+checkStanding(settled, 'after idle animation');
+for (const arm of settled.arms) {
+  assert.ok(arm.drop > 0.35, `${arm.names.join(' > ')}: arm still hangs below horizontal (got ${arm.drop.toFixed(3)})`);
 }
 
 await page.evaluate(() => { document.getElementById('hud').style.display = 'none'; });
