@@ -38,6 +38,18 @@ for (const leg of stance.legs) {
 const toes = stance.legs.map(l => l.toeY);
 assert.ok(Math.abs(toes[0] - toes[1]) < height * 0.03, 'feet level with each other');
 
+// three.js strips ':' from glTF node names, so a matcher written only for `tripo::0_` silently
+// matches nothing. Every bone name below must be a real resolved bone, never empty.
+for (const names of [...stance.legs, ...stance.arms].map(p => p.names)) {
+  assert.ok(names.every(n => n && n.length), `resolved bone names, got ${JSON.stringify(names)}`);
+}
+
+// Arms out of the dead T-pose.
+assert.equal(stance.arms.length, 2, 'both arms resolved');
+for (const arm of stance.arms) {
+  assert.ok(arm.drop > 0.35, `${arm.names.join(' > ')}: arm hangs below horizontal (got ${arm.drop.toFixed(3)})`);
+}
+
 await page.evaluate(() => { document.getElementById('hud').style.display = 'none'; });
 await page.waitForTimeout(1500);
 // Software rendering needs a generous budget for this scene.

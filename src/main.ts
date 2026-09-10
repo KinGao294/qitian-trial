@@ -149,16 +149,19 @@ function straightenLegs(legs:Leg[]){
  return touched;
 }
 
-// Break the dead T-pose by swinging each arm down around the axis perpendicular to (up, arm).
-function relaxArms(model:T.Object3D,deg=40){
+// Arms hang off the same bone as the head, whatever that bone happens to be named.
+const chainTip=(bone:T.Object3D)=>{let tip=bone;while(tip.children.length)tip=tip.children[0];return tip;};
+function findArms(model:T.Object3D){
  let head:T.Object3D|undefined;
  model.traverse(o=>{if(!head&&/^head(_|$)/.test(boneKey(o)))head=o;});
- const chest=head?.parent;
+ return head?.parent?.children.filter(c=>c!==head&&c.children.length)??[];
+}
+
+// Break the dead T-pose by swinging each arm down around the axis perpendicular to (up, arm).
+function relaxArms(arms:T.Object3D[],deg=40){
  const touched:string[]=[];
- if(!chest)return touched;
  const up=new T.Vector3(0,1,0),from=new T.Vector3(),to=new T.Vector3();
- for(const shoulder of chest.children){
-  if(shoulder===head||!shoulder.children.length)continue;
+ for(const shoulder of arms){
   shoulder.updateWorldMatrix(true,true);
   shoulder.getWorldPosition(from);shoulder.children[0].getWorldPosition(to);
   const dir=to.sub(from);
@@ -209,7 +212,8 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  const {scene:model}=await gltfLoader.loadAsync(assetUrl(`models/${file}.glb`));
  model.traverse(o=>{if(o instanceof T.Mesh){o.castShadow=true;o.receiveShadow=true;for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m&&'envMapIntensity' in m){(m as T.MeshStandardMaterial).envMapIntensity=1.15;(m as T.MeshStandardMaterial).needsUpdate=true;}}});
  let rootBone:T.Object3D|undefined;
- model.traverse(o=>{if(!rootBone&&/(^|::)Root$/i.test(o.name||''))rootBone=o;});
+ model.traverse(o=>{if(!rootBone&&/^root$/.test(boneKey(o)))rootBone=o;});
+ console.info('[trial] root bone',{file,name:rootBone?.name??'(none)',y:rootBone?.position.y});
  if(rootBone&&rootBone.position.y<0){console.info('[trial] zero Root local translation',{file,oldY:rootBone.position.y});rootBone.position.y=0;}
  const orient=root.userData.orient as T.Group;
  orient.clear();orient.rotation.set(0,-Math.PI/2,0);
@@ -217,21 +221,22 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
  orient.add(model);
  refreshMatrices(orient);
  const feet:T.Object3D[]=[];
- let legBones:Leg[]=[];
+ let legBones:Leg[]=[],armBones:T.Object3D[]=[];
  if(file==='player'){
   logBoneTree(orient);
   const legs=legBones=findLegs(model);
   for(const leg of legs)feet.push(leg.ankle,leg.toe);
+  armBones=findArms(model);
   const legFixes=straightenLegs(legs);
-  const armFixes=relaxArms(model);
-  console.info('[trial] player straighten',{legs:legs.map(l=>[l.hip.name,l.knee.name,l.ankle.name,l.toe.name].join(' > ')).join(' | '),legFixes:legFixes.join(),armFixes:armFixes.join()});
+  const armFixes=relaxArms(armBones);
+  console.info('[trial] player straighten',{legs:legs.map(l=>[l.hip.name,l.knee.name,l.ankle.name,l.toe.name].join(' > ')).join(' | '),arms:armBones.map(a=>a.name).join(),legFixes:legFixes.join(),armFixes:armFixes.join()});
  }
  refreshMatrices(orient);
  const bb=new T.Box3().setFromObject(orient);
  const h=Math.max(bb.max.y-bb.min.y,.001);
  model.scale.setScalar(targetHeight/h);
  groundOrient(orient,file==='boss'?'boss':'player',feet);
- root.userData.legs=[];root.userData.model=model;root.userData.legBones=legBones;
+ root.userData.legs=[];root.userData.model=model;root.userData.legBones=legBones;root.userData.armBones=armBones;
  console.info('[trial] load',file,'euler',orient.rotation.toArray(),'worldH',targetHeight,'scale',model.scale.x);
 }
 
@@ -446,6 +451,7 @@ camera.position.set(0,5.7,20);frame();window.addEventListener('resize',()=>{came
 // Measured standing pose, so stance regressions (floating or side-folded legs) are testable.
 function stanceReport(){
  const legs=(player.userData.legBones??[]) as Leg[];
+ const arms=(player.userData.armBones??[]) as T.Object3D[];
  const orient=player.userData.orient as T.Group;
  refreshMatrices(orient);
  const box=new T.Box3();
@@ -463,6 +469,12 @@ function stanceReport(){
     // 1 means the thigh+shin line points straight at the floor, 0 means the leg sticks sideways.
     uprightness:-down.y,
    };
+  }),
+  arms:arms.map(shoulder=>{
+   const tip=chainTip(shoulder);
+   const dir=at(tip).sub(at(shoulder)).normalize();
+   // 0 means a dead horizontal T-pose, 1 means the arm hangs straight down.
+   return {names:[shoulder.name,tip.name],drop:-dir.y};
   }),
  };
 }
