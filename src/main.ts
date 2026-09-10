@@ -210,10 +210,11 @@ type BossMove='slam'|'swipe'|'fire';
 const BOSS_MOVES={
  slam:{wind:.95,strike:.17,recover:.72,reach:2.5,radius:4.3,damage:28,name:'巨掌砸地'},
  swipe:{wind:.6,strike:.26,recover:.6,reach:.8,radius:5.4,arc:2.5,damage:22,name:'巨爪横扫'},
- fire:{wind:.9,strike:1.35,recover:.85,range:9.2,half:.3,dps:20,turn:1.1,name:'熔岩吐息'},
+ fire:{wind:.9,strike:1.35,recover:.85,range:8.6,half:.21,dps:20,turn:1.1,name:'熔岩吐息'},
 } as const;
-// Fraction of the boss bounding box where the muzzle sits: near the front, in the upper body mass.
-const BOSS_MOUTH={forward:.82,up:.63};
+// Where the muzzle sits inside the boss bounding box: at the front of the head mass, which on this
+// sculpt is the top-front of the body (the low tail runs out the back).
+const BOSS_MOUTH={forward:.86,up:.78};
 type BossAtk={move:BossMove,t:number,hit:boolean,dir:T.Vector3,center:T.Vector3,tele?:T.Group,jet?:ReturnType<typeof fireJet>};
 type Enemy={mesh:T.Group,hp:number,max:number,boss:boolean,home:T.Vector3,cool:number,wind:number,fireT:number,hit:boolean,dead:boolean,label:HTMLDivElement,pattern:number,atk:BossAtk|null,step:number};
 const enemies:Enemy[]=[];for(const [x,z,boss] of [[0,-7,1]]){const mesh=warrior(true,!!boss);mesh.position.set(x,0,z);const label=document.createElement('div');label.className='enemy-label'+(boss?' boss-label':'');label.innerHTML=`${boss?'镇山巨兽':'石魇'}<i></i>`;document.body.append(label);enemies.push({mesh,hp:boss?380:80,max:boss?380:80,boss:!!boss,home:mesh.position.clone(),cool:1+rand(),wind:0,fireT:0,hit:false,dead:false,label,pattern:0,atk:null,step:0});}
@@ -263,7 +264,10 @@ async function loadCharacter(root:T.Group,file:string,targetHeight:number){
   // The boss GLB is one static sculpt, so the muzzle is derived from its bounds: front of the body,
   // in the upper mass where the head sits. Fire is spawned from this anchor, never from the feet.
   refreshMatrices(orient);
-  const bodyBox=new T.Box3().setFromObject(model);
+  // Box3.setFromObject reports world bounds; the anchor is a child of `orient`, so bring the corners
+  // back into that frame first (the orient yaw only permutes axes, so the box stays axis aligned).
+  const worldBox=new T.Box3().setFromObject(model);
+  const bodyBox=new T.Box3().setFromPoints([orient.worldToLocal(worldBox.min.clone()),orient.worldToLocal(worldBox.max.clone())]);
   const mouth=new T.Object3D();mouth.name='BossMouth';
   mouth.position.set(bodyBox.max.x*BOSS_MOUTH.forward,bodyBox.min.y+(bodyBox.max.y-bodyBox.min.y)*BOSS_MOUTH.up,0);
   orient.add(mouth);
@@ -291,11 +295,11 @@ function startUltimate(){
  stamina-=45;ultT=ULT_DUR;ultCd=7.5;ultHit=false;shake=.28;attackT=0;queued=false;invulnerable=.35;
  notice('行者 · 定海神针');sound(90,.35,'sawtooth',.07);sound(420,.4,'triangle',.05);
  // Gather: light drawn in around the warrior before the staff comes down.
- ring(player.position,'#ffe29a',2.6,.45);ring(player.position,'#fff0bd',1.5,.6);
- pillar(player.position,'#ffdf9a',.85,4.6,.75);
+ ring(player.position,'#e2ac59',2.4,.5);
+ pillar(player.position,'#ffd88c',.8,4.4,.8);
  sparks(player.position,16,'#fff0c0');
 }
-function dodge(){if(!running||stamina<30||dodgeT>0||ultT>0)return;if(attackT>0 && (1-attackT/ATTACK_DUR[combo])<.4)return;stamina-=30;dodgeT=DODGE_DUR;invulnerable=.5;attackT=0;sound(140,.15,'sine');notice('行者 · 纵身闪避');ring(player.position,'#9ad7ff',1.4,.28);dust(player.position,5,'#8f9aa0',1,.7);}
+function dodge(){if(!running||stamina<30||dodgeT>0||ultT>0)return;if(attackT>0 && (1-attackT/ATTACK_DUR[combo])<.4)return;stamina-=30;dodgeT=DODGE_DUR;invulnerable=.5;attackT=0;sound(140,.15,'sine');notice('行者 · 纵身闪避');ring(player.position,'#9ad7ff',1.4,.28);dust(player.position,5,'#8f9aa0',1,.7,.9);}
 const coarse=isLikelyTouch;
 let touchSeen=false;
 window.addEventListener('touchstart',()=>{touchSeen=true;},{passive:true});let joyId=-1,lookId=-1,lastLX=0,lastLY=0;
@@ -326,7 +330,18 @@ function fxAlpha(root:T.Object3D,alpha:number){root.traverse(o=>{
 });}
 function fxDispose(root:T.Object3D){root.traverse(o=>{const m=o as T.Mesh;m.geometry?.dispose();const mats=m.material;if(mats)for(const mm of Array.isArray(mats)?mats:[mats])mm.dispose();});}
 function fx(mesh:T.Object3D,life:number,extra:Partial<Fx>={}){const e:Fx={mesh,life,max:life,...extra};effects.push(e);return e;}
-const additive=(color:string,opacity=.8)=>new T.MeshBasicMaterial({color,transparent:true,opacity,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide});
+const additive=(color:string,opacity=.8,vertexColors=false)=>new T.MeshBasicMaterial({color,transparent:true,opacity,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide,vertexColors});
+// Fade an additive cone along its axis so a flame is hottest at the muzzle and thins out downrange
+// instead of reading as one flat solid wedge. ConeGeometry keeps its apex at +height/2.
+function taperCone(geom:T.BufferGeometry,height:number){
+ const pos=geom.attributes.position;const col=new Float32Array(pos.count*3);
+ for(let i=0;i<pos.count;i++){
+  const t=T.MathUtils.clamp((pos.getY(i)+height/2)/height,0,1);
+  const v=Math.min(1,.08+1.05*Math.pow(t,1.7));
+  col[i*3]=col[i*3+1]=col[i*3+2]=v;
+ }
+ geom.setAttribute('color',new T.BufferAttribute(col,3));
+}
 function ring(pos:T.Vector3,color:string,size:number,life:number){const mesh=new T.Mesh(new T.RingGeometry(size*.85,size,40),new T.MeshBasicMaterial({color,side:T.DoubleSide,transparent:true,opacity:.85,depthWrite:false}));mesh.rotation.x=-Math.PI/2;mesh.position.copy(pos);mesh.position.y+=.12;scene.add(mesh);effects.push({mesh,life,max:life,grow:size*0.35});}
 function sparks(pos:T.Vector3,n=7,color='#ffe7a0'){for(let i=0;i<n;i++){const m=new T.MeshStandardMaterial({color,emissive:color,emissiveIntensity:2.2,roughness:0.4,metalness:0.2,transparent:true});const mesh=sphere(.05+rand()*.04,m,pos.x+(rand()-.5)*0.6,pos.y+.4+rand()*1.4,pos.z+(rand()-.5)*0.6,scene);effects.push({mesh,life:.28+rand()*.25,max:.5,vy:1.5+rand()*2,vx:(rand()-.5)*2,vz:(rand()-.5)*2});}}
 function beam(origin:T.Vector3,dir:T.Vector3,length:number,color:string,life=.35,radius=.08){
@@ -350,12 +365,12 @@ function fireCone(origin:T.Vector3,yaw:number,life=.55){
 }
 // --- weight and impact: dust, shockwaves, ground telegraphs, cracks ---
 // Soft billowing puffs that sell mass — kicked up by every heavy footfall and impact.
-function dust(pos:T.Vector3,n=8,color='#a89880',spread=1.4,power=1){
+function dust(pos:T.Vector3,n=8,color='#a89880',spread=1.4,power=1,size=1){
  for(let i=0;i<n;i++){
-  const m=new T.MeshStandardMaterial({color,roughness:1,transparent:true,opacity:.5});
-  const mesh=sphere(.22+rand()*.3,m,pos.x+(rand()-.5)*spread,pos.y+.15+rand()*.4,pos.z+(rand()-.5)*spread,scene);
-  const dir=new T.Vector3(rand()-.5,0,rand()-.5).normalize().multiplyScalar((.9+rand()*1.6)*power);
-  fx(mesh,.5+rand()*.5,{vx:dir.x,vy:.7+rand()*.9*power,vz:dir.z,grow:1.5+rand()});
+  const m=new T.MeshStandardMaterial({color,roughness:1,transparent:true,opacity:.34});
+  const mesh=sphere((.1+rand()*.14)*size,m,pos.x+(rand()-.5)*spread,pos.y+.1+rand()*.3*size,pos.z+(rand()-.5)*spread,scene);
+  const dir=new T.Vector3(rand()-.5,0,rand()-.5).normalize().multiplyScalar((.7+rand()*1.3)*power);
+  fx(mesh,.4+rand()*.4,{vx:dir.x,vy:.5+rand()*.7*power,vz:dir.z,grow:.8+rand()*.7});
  }
 }
 // A ground ring that races outward from an impact. `radius` is the gameplay radius it ends on.
@@ -397,40 +412,46 @@ function telegraphDisc(pos:T.Vector3,radius:number,color:string,life:number){
 }
 /** Three glowing gouges raked through the air along a boss claw sweep. */
 function clawArc(pos:T.Vector3,yaw:number,radius:number,arc:number,life=.32){
- const g=new T.Group();g.position.copy(pos);g.rotation.y=yaw-arc*.55;scene.add(g);
+ const start=yaw-arc*.45;
+ const g=new T.Group();g.position.copy(pos);g.rotation.y=start;scene.add(g);
  for(let i=0;i<3;i++){
-  const claw=new T.Mesh(new T.TorusGeometry(radius-i*.34,.075,6,26,arc*.5),additive(i?'#ffb072':'#ffe0b0',.75-i*.12));
+  const claw=new T.Mesh(new T.TorusGeometry(radius-i*.3,.07,6,26,arc*.45),additive(i?'#ffb072':'#ffe0b0',.7-i*.12));
   // Euler XYZ applies Z first, so this spins the arc onto the group's forward before it lies flat.
-  claw.rotation.x=Math.PI/2;claw.rotation.z=Math.PI/2-arc*.25;claw.position.y=2.5-i*.42;
+  claw.rotation.x=Math.PI/2;claw.rotation.z=Math.PI/2-arc*.22;claw.position.y=2.15-i*.38;
   g.add(claw);
  }
- fx(g,life,{tick:(e,age)=>{e.mesh.rotation.y=yaw-arc*.55+arc*1.1*Math.min(1,age*1.35);}});
+ // The sweep finishes in the first half of the life so the gouges are across the player's front
+ // while the hit window is open, then hang in the air for a beat.
+ fx(g,life,{tick:(e,age)=>{e.mesh.rotation.y=start+arc*.9*Math.min(1,age*2);}});
 }
 // Radial fissures under a slam. Thin slabs, so they read as broken flagstones rather than decals.
 function cracks(pos:T.Vector3,radius:number,n=7,color='#ff9d52'){
  for(let i=0;i<n;i++){
-  const a=rand()*Math.PI*2,len=radius*(.5+rand()*.7);
-  const mesh=new T.Mesh(new T.BoxGeometry(len,.05,.08+rand()*.1),additive(color,.75));
+  const a=rand()*Math.PI*2,len=radius*(.35+rand()*.5);
+  const mesh=new T.Mesh(new T.BoxGeometry(len,.04,.05+rand()*.07),additive(color,.42));
   mesh.position.set(pos.x+Math.cos(a)*len/2,pos.y+.04,pos.z+Math.sin(a)*len/2);
   mesh.rotation.y=-a;scene.add(mesh);
-  fx(mesh,.5+rand()*.35,{tick:(e,age)=>{e.mesh.scale.x=Math.min(1,age*3.2);}});
+  fx(mesh,.45+rand()*.3,{tick:(e,age)=>{e.mesh.scale.x=Math.min(1,age*3.2);}});
  }
 }
 // Rising column of light for the ultimate: a stack of additive shells that flare and lift.
 function pillar(pos:T.Vector3,color:string,radius:number,height:number,life=.7){
  const g=new T.Group();g.position.copy(pos);scene.add(g);
  for(let i=0;i<3;i++){
-  const shell=new T.Mesh(new T.CylinderGeometry(radius*(1-i*.28),radius*(1.5-i*.3),height,20,1,true),additive(color,.32-i*.07));
-  shell.position.y=height/2;g.add(shell);
+  const geom=new T.CylinderGeometry(radius*(1-i*.28),radius*(1.5-i*.3),height,20,5,true);
+  // Reuse the flame taper: bright where it leaves the ground, thinning as it climbs.
+  taperCone(geom,height);
+  const shell=new T.Mesh(geom,additive(color,.2-i*.05,true));
+  shell.rotation.x=Math.PI;shell.position.y=height/2;g.add(shell);
  }
- const light=new T.PointLight(color,26,16,2);light.position.y=1.4;g.add(light);
+ const light=new T.PointLight(color,18,16,2);light.position.y=1.4;g.add(light);
  fx(g,life,{tick:(e,age)=>{e.mesh.scale.set(1+age*.55,1+age*.35,1+age*.55);e.mesh.rotation.y=age*2.2;}});
 }
 // --- boss fire breath: mouth ember charge, then a tracked jet whose cone *is* the hitbox ---
 function mouthEmber(mouth:T.Object3D,life:number){
  const g=new T.Group();mouth.add(g);
- const core=new T.Mesh(new T.SphereGeometry(.34,12,10),additive('#ffcf7a',.9));g.add(core);
- const halo=new T.Mesh(new T.SphereGeometry(.6,12,10),additive('#ff6a26',.4));g.add(halo);
+ const core=new T.Mesh(new T.SphereGeometry(.2,12,10),additive('#ffcf7a',.75));g.add(core);
+ const halo=new T.Mesh(new T.SphereGeometry(.4,12,10),additive('#ff6a26',.32));g.add(halo);
  const light=new T.PointLight('#ff8a32',0,9,2);light.userData.base=16;g.add(light);
  // Brightens as the breath charges, which is the tell the player reads.
  return fx(g,life,{ownAlpha:true,tick:(e,age)=>{
@@ -443,13 +464,15 @@ function fireJet(length:number,radius:number){
  // Nested cones: pale core, orange body, dark smoke skirt. Each cone is turned so its point sits at
  // the muzzle and its mouth flares outward along the group's +Z, which is the aiming axis.
  const layers:T.Mesh[]=[];
- const spec:[string,number,number,number][]=[['#fff3c8',.42,.86,.55],['#ff9a3c',.78,.72,.85],['#ff5a1e',1,.5,1],['#6b4432',1.25,.22,1.1]];
+ const spec:[string,number,number,number][]=[['#ffeec0',.4,.42,.55],['#ff9a3c',.72,.34,.85],['#ff5a1e',1,.24,1],['#6b4432',1.22,.14,1.1]];
  for(const [color,scale,opacity,len] of spec){
-  const cone=new T.Mesh(new T.ConeGeometry(radius*scale,length*len,16,4,true),additive(color,opacity));
+  const geom=new T.ConeGeometry(radius*scale,length*len,16,5,true);
+  taperCone(geom,length*len);
+  const cone=new T.Mesh(geom,additive(color,opacity,true));
   cone.rotation.x=-Math.PI/2;cone.position.z=length*len/2;
   g.add(cone);layers.push(cone);
  }
- const light=new T.PointLight('#ff7a28',24,14,2);light.position.z=1.2;g.add(light);
+ const light=new T.PointLight('#ff7a28',13,13,2);light.position.z=1.2;g.add(light);
  return {group:g,layers,light};
 }
 function staffSlashTrail(pos:T.Vector3,yaw:number,combo:number){
@@ -518,7 +541,7 @@ function bossSlam(e:Enemy,a:BossAtk,dt:number,diff:T.Vector3){
   if(!a.hit){
    a.hit=true;
    shockwave(a.center,S.radius,'#ffb277',.5);cracks(a.center,S.radius*.85,10);
-   dust(a.center,15,'#9c9384',S.radius*.8,1.6);sparks(a.center,8,'#ffb066');
+   dust(a.center,13,'#9c9384',S.radius*.8,1.6,2.4);sparks(a.center,8,'#ffb066');
    shake=Math.max(shake,.44);hitstop=.05;sound(36,.45,'sawtooth',.07);
    const off=player.position.clone().sub(a.center);
    if(Math.hypot(off.x,off.z)<S.radius&&Math.abs(off.y)<2.8&&invulnerable<=0)hurtPlayer(S.damage,'#c94b30');
@@ -543,7 +566,7 @@ function bossSwipe(e:Enemy,a:BossAtk,dt:number,diff:T.Vector3){
    a.hit=true;
    const face=yawDir(e.mesh.rotation.y);
    clawArc(e.mesh.position.clone().add(face.clone().multiplyScalar(.9)),e.mesh.rotation.y,S.radius*.82,S.arc);
-   dust(e.mesh.position.clone().add(face.clone().multiplyScalar(S.radius*.5)),8,'#98907f',S.radius,1.1);
+   dust(e.mesh.position.clone().add(face.clone().multiplyScalar(S.radius*.5)),8,'#98907f',S.radius,1.1,1.5);
    shake=Math.max(shake,.26);sound(72,.24,'sawtooth',.05);
    const off=player.position.clone().sub(e.mesh.position);off.y=0;
    const reach=Math.hypot(off.x,off.z);
@@ -574,10 +597,12 @@ function bossFire(e:Enemy,a:BossAtk,dt:number,diff:T.Vector3){
   const flat=yawDir(e.mesh.rotation.y).multiplyScalar(Math.sqrt(Math.max(0,1-drop*drop)));
   a.dir.set(flat.x,drop,flat.z).normalize();
   if(!a.jet){
-   a.jet=fireJet(F.range,F.range*Math.tan(F.half));
-   fx(a.jet.group,F.strike+.22,{tick:(_x,age)=>{
+   const jet=a.jet=fireJet(F.range,F.range*Math.tan(F.half));
+   // The jet outlives the breath by a moment so it can gutter out, so the flicker holds its own
+   // reference instead of reading the attack state that is about to be cleared.
+   fx(jet.group,F.strike+.22,{tick:(_x,age)=>{
     const wob=1+Math.sin(age*90)*.05;
-    a.jet!.layers.forEach((l,i)=>l.scale.set(wob+(i%2?.04:-.03),1,wob));
+    jet.layers.forEach((l,i)=>l.scale.set(wob+(i%2?.04:-.03),1,wob));
    }});
   }
   a.jet.group.position.copy(origin);
@@ -626,7 +651,7 @@ function updateBoss(e:Enemy,dt:number,diff:T.Vector3,dist:number){
   vis.rotation.z=Math.sin(e.step*.5)*.06;
   // Dust on every footfall: a static sculpt still reads as heavy when the ground answers back.
   if(Math.floor(e.step/Math.PI)!==Math.floor(before/Math.PI)){
-   dust(e.mesh.position.clone().add(step.clone().multiplyScalar(1.2)),5,'#8e8677',2.4,1.1);
+   dust(e.mesh.position.clone().add(step.clone().multiplyScalar(1.2)),5,'#8e8677',2.4,1.1,1.7);
    sound(46,.16,'sine',.035);shake=Math.max(shake,.05);
   }
  }else{
@@ -647,7 +672,7 @@ const moving=velocity.lengthSq()>0&&attackT<=0&&dodgeT<=0;
 player.userData.movePose=T.MathUtils.damp(player.userData.movePose,moving?1:0,10,dt);
 if(mixerActive){ const w=moving?1:0; locoActions.walk?.setEffectiveWeight(w); locoActions.idle?.setEffectiveWeight(1-w); }
 // Touchdown: crouch recovery plus a puff of grit, so a jump ends on something physical.
-if(grounded&&!wasGrounded&&airT>.12){landT=LAND_DUR;dust(player.position,6,'#9aa093',1.1,.75);sound(115,.12,'sine',.045);shake=Math.max(shake,.07);}
+if(grounded&&!wasGrounded&&airT>.12){landT=LAND_DUR;dust(player.position,6,'#9aa093',1.1,.75,1);sound(115,.12,'sine',.045);shake=Math.max(shake,.07);}
 wasGrounded=grounded;airT=grounded?0:airT+dt;landT=Math.max(0,landT-dt);flinchT=Math.max(0,flinchT-dt);
 player.userData.torso.rotation.z=dodgeT>0?-0.2:0;
 if(ultT>0){
@@ -667,7 +692,7 @@ if(ultT>0){
   shockwave(player.position,8.6,'#ffe6a8',.5);
   groundFan(player.position,player.rotation.y,8.5,1.5,'#ffd98a',.45,false);
   cracks(impact,5.5,9,'#ffcf7a');
-  dust(impact,10,'#b3a68c',2.4,1.3);
+  dust(impact,10,'#b3a68c',2.4,1.3,2);
   pillar(impact,'#fff2c6',1.1,5.4,.6);
   sound(58,.4,'sawtooth',.06);
   shake=Math.max(shake,.34);hitstop=.06;
@@ -777,17 +802,20 @@ function animatePlayer(dt:number){
  vis.rotation.set(rootMotion.pitch,rootMotion.spin,rootMotion.roll);
  // Grit under the boots on every footfall of the run cycle.
  const phase=Math.floor(playerRig.stride/Math.PI);
- if(grounded&&player.userData.movePose>.55&&phase!==footPhase){footPhase=phase;dust(player.position,2,'#9d968a',.7,.45);}
+ if(grounded&&player.userData.movePose>.55&&phase!==footPhase){footPhase=phase;dust(player.position,2,'#9d968a',.7,.45,.55);}
  else if(phase!==footPhase)footPhase=phase;
 }
-function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.033);if(running)update(dt);for(let i=effects.length-1;i>=0;i--){const e=effects[i];const age=1-Math.max(e.life,0)/e.max;
+// Effects age with the simulation, not with the render loop, so a stepped test sees the same
+// number of live effects a player would.
+function updateEffects(dt:number){for(let i=effects.length-1;i>=0;i--){const e=effects[i];const age=1-Math.max(e.life,0)/e.max;
  if(running){e.life-=dt;if(e.vx||e.vy||e.vz){e.mesh.position.x+=(e.vx||0)*dt;e.mesh.position.y+=(e.vy||0)*dt;e.mesh.position.z+=(e.vz||0)*dt;if(e.vy!==undefined)e.vy-=6*dt;}if(e.grow)e.mesh.scale.setScalar(1+age*e.grow);e.tick?.(e,age,dt);}
  if(!e.ownAlpha)fxAlpha(e.mesh,Math.max(0,e.life/e.max));
- if(e.life<=0){e.mesh.removeFromParent();fxDispose(e.mesh);effects.splice(i,1);}}
+ if(e.life<=0){e.mesh.removeFromParent();fxDispose(e.mesh);effects.splice(i,1);}}}
+function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.033);if(running)update(dt);updateEffects(dt);
 const t=performance.now()/1000;banners.forEach((b,i)=>{b.rotation.x=Math.sin(t*1.5+i)*.045;b.rotation.z=Math.sin(t+i)*.025;});flames.forEach((f,i)=>(f.material as T.MeshStandardMaterial).emissiveIntensity=1.8+Math.sin(t*5+i)*.25);
-shake=Math.max(0,shake-dt*1.8); look.copy(player.position).add(new T.Vector3(0,1.3,0));desired.copy(look).add(new T.Vector3(Math.sin(yaw)*8.2,1.7+pitch*4,Math.cos(yaw)*8.2));desired.x=T.MathUtils.clamp(desired.x,-22,22);desired.z=T.MathUtils.clamp(desired.z,-22,24);camera.position.lerp(desired,1-Math.exp(-dt*8)); if(shake>0) camera.position.add(new T.Vector3((Math.random()-.5)*shake,(Math.random()-.5)*shake*.6,(Math.random()-.5)*shake)); camera.lookAt(look);
+shake=Math.max(0,shake-dt*1.8); look.copy(player.position).add(new T.Vector3(0,1.3,0));desired.copy(look).add(new T.Vector3(Math.sin(yaw)*7.2,1.55+pitch*3.7,Math.cos(yaw)*7.2));desired.x=T.MathUtils.clamp(desired.x,-22,22);desired.z=T.MathUtils.clamp(desired.z,-22,24);camera.position.lerp(desired,1-Math.exp(-dt*8)); if(shake>0) camera.position.add(new T.Vector3((Math.random()-.5)*shake,(Math.random()-.5)*shake*.6,(Math.random()-.5)*shake)); camera.lookAt(look);
 for(const e of enemies){project.copy(e.mesh.position);project.y+=e.boss?5.2:2.8;project.project(camera);e.label.style.display=started&&!e.dead&&project.z<1&&project.z>0?'block':'none';e.label.style.left=`${(project.x*.5+.5)*innerWidth}px`;e.label.style.top=`${(-project.y*.5+.5)*innerHeight}px`;e.label.querySelector('i')!.setAttribute('style',`width:${Math.max(0,e.hp/e.max*100)}%`);}
-el('hp').style.width=`${hp}%`;if(el('hpText')) el('hpText')!.textContent=`${hp} / 100`;el('stamina').style.width=`${stamina}%`;if(el('count')) el('count')!.textContent=String(kills);if(el('ult')) el('ult')!.textContent=ultCd>0?`K 定海神针 · ${ultCd.toFixed(1)}s`:'K 定海神针 · 就绪';hurt=Math.max(0,hurt-dt);el('hurt').style.opacity=String(hurt*.7);if(running)noticeT=Math.max(0,noticeT-dt);el('notice').style.opacity=noticeT>0?'1':'0';renderer.render(scene,camera);}
+el('hp').style.width=`${hp}%`;if(el('hpText')) el('hpText')!.textContent=`${Math.ceil(hp)} / 100`;el('stamina').style.width=`${stamina}%`;if(el('count')) el('count')!.textContent=String(kills);if(el('ult')) el('ult')!.textContent=ultCd>0?`K 定海神针 · ${ultCd.toFixed(1)}s`:'K 定海神针 · 就绪';hurt=Math.max(0,hurt-dt);el('hurt').style.opacity=String(hurt*.7);if(running)noticeT=Math.max(0,noticeT-dt);el('notice').style.opacity=noticeT>0?'1':'0';renderer.render(scene,camera);}
 camera.position.set(0,5.7,20);frame();window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 // Measured standing pose, so stance regressions (floating or side-folded legs) are testable.
 function stanceReport(){
@@ -832,6 +860,7 @@ function poseReport(){
  const pick=(v:T.Vector3)=>({x:+v.x.toFixed(4),y:+v.y.toFixed(4),z:+v.z.toFixed(4)});
  return {
   ...playerRig.report(),
+  time,speed:player.userData.movePose as number,
   root:{...rootMotion},
   hands:playerRig.arms.map(a=>({side:a.side,...pick(local(a.hand.bone))})),
   toes:playerRig.legs.map(l=>({side:l.side,...pick(local(l.toe.bone))})),
@@ -857,4 +886,7 @@ function bossReport(){
 Object.defineProperty(window,'__trial',{get:()=>({running,artReady,hp,kills,grounded,yaw,attack:attackT>0?combo:-1,player:player.position.toArray(),stance:stanceReport,pose:poseReport,boss:bossReport,
  // Test hook: skip the cooldown roll so a smoke test can watch one specific move.
  forceBossMove:(move:BossMove)=>{const e=enemies.find(x=>x.boss);if(!e||e.dead||!running)return false;e.atk=null;e.cool=0;startBossMove(e,move,player.position.clone().sub(e.mesh.position));return true;},
+ // Test hook: advance the simulation without waiting on the renderer. Software-rendered CI draws
+ // roughly one frame a second, far too coarse to sample an animation cycle from wall-clock time.
+ step:(steps=1,dt=1/60)=>{const d=Math.min(dt,.033);for(let i=0;i<steps&&running;i++){update(d);updateEffects(d);}return time;},
  enemies:enemies.map(e=>({hp:e.hp,dead:e.dead,position:e.mesh.position.toArray()}))})});

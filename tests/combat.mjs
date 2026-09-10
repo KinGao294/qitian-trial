@@ -1,0 +1,141 @@
+import { chromium } from '@playwright/test';
+import assert from 'node:assert/strict';
+
+// Combat smoke: proves the warrior's skeleton actually animates (run / jump / attack / ultimate)
+// and that every boss move telegraphs from the right place with a hitbox that matches its visual.
+//
+// Software rendering in CI draws roughly one frame per second, so the simulation is advanced through
+// `__trial.step()` instead of wall-clock waits; sampling stays deterministic and the run finishes in
+// seconds. Screenshots are taken sparingly because each one forces a real (slow) render.
+const base = process.env.TRIAL_URL ?? 'http://localhost:5173/qitian-trial/';
+const shots = process.env.TRIAL_SHOTS !== '0';
+const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const page = await browser.newPage({ viewport: { width: 960, height: 640 } });
+const errors = [];
+page.on('pageerror', e => errors.push(e.message));
+page.on('console', m => { if (m.text().startsWith('[trial]')) console.log(m.text()); });
+
+await page.goto(base);
+await page.waitForFunction(() => window.__trial?.artReady, {}, { timeout: 60000 });
+await page.click('#start');
+await page.waitForFunction(() => window.__trial.running, {}, { timeout: 20000 });
+
+const step = (steps = 1, dt = 1 / 60) => page.evaluate(([s, d]) => window.__trial.step(s, d), [steps, dt]);
+const pose = () => page.evaluate(() => window.__trial.pose());
+const boss = () => page.evaluate(() => window.__trial.boss());
+const shot = async name => { if (shots) await page.screenshot({ path: `tests/${name}.png`, timeout: 180000 }); };
+const spread = xs => Math.max(...xs) - Math.min(...xs);
+const avg = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
+const jointDeg = (p, part) => p.joints.find(j => j.part === part)?.deg ?? 0;
+async function sample(count, stepsEach = 3) {
+  const out = [];
+  for (let i = 0; i < count; i++) { await step(stepsEach); out.push(await pose()); }
+  return out;
+}
+
+const idle = await pose();
+assert.ok(idle, 'the player rig resolved from the Tripo skeleton');
+assert.equal(idle.toes.length, 2, 'both legs are driven by the rig');
+assert.equal(idle.hands.length, 2, 'both arms are driven by the rig');
+console.log('idle', idle.joints.map(j => `${j.part}=${j.deg.toFixed(0)}`).join(' '));
+// The idle keeps the verified standing bind: legs untouched, arms out of the T-pose.
+assert.ok(jointDeg(idle, 'hipL') < 2 && jointDeg(idle, 'hipR') < 2, 'idle leaves the legs on the bind pose');
+assert.ok(Math.min(jointDeg(idle, 'armL'), jointDeg(idle, 'armR')) > 12, 'idle brings the arms down into a guard');
+
+// --- run: the stride has to swing the legs, not slide a frozen pose across the courtyard ---
+await page.keyboard.down('KeyW');
+const running = await sample(16, 3);
+await shot('combat-run');
+await page.keyboard.up('KeyW');
+const startZ = idle.toes[0].z;
+console.log('run', running.map(p => p.toes.map(t => t.z.toFixed(2)).join('/')).join(' '));
+for (const side of [-1, 1]) {
+  const toeZ = running.map(p => p.toes.find(t => t.side === side).z);
+  const toeY = running.map(p => p.toes.find(t => t.side === side).y);
+  assert.ok(spread(toeZ) > 0.25, `side ${side}: foot travels fore/aft while running (got ${spread(toeZ).toFixed(3)}m)`);
+  assert.ok(spread(toeY) > 0.06, `side ${side}: foot lifts off the ground while running (got ${spread(toeY).toFixed(3)}m)`);
+}
+const leftLeg = running.map(p => p.toes.find(t => t.side === -1).z);
+const rightArm = running.map(p => p.hands.find(h => h.side === 1).z);
+assert.ok(spread(rightArm) > 0.12, `arms swing with the stride (got ${spread(rightArm).toFixed(3)}m)`);
+// Opposite arm and leg lead, the way people actually run.
+const cross = leftLeg.reduce((acc, z, i) => acc + (z - avg(leftLeg)) * (rightArm[i] - avg(rightArm)), 0);
+assert.ok(cross > 0, 'the right arm swings with the left leg');
+assert.ok(Math.abs(startZ) < 0.3, 'the idle stance starts with the feet under the body');
+
+// --- jump: legs tuck in the air, then the landing crouch fires ---
+await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' })));
+await step(8);
+const air = await pose();
+assert.equal((await page.evaluate(() => window.__trial.grounded)), false, 'the jump leaves the ground');
+assert.ok(Math.max(jointDeg(air, 'kneeL'), jointDeg(air, 'kneeR')) > 15,
+  `knees tuck in the air (got ${jointDeg(air, 'kneeL').toFixed(1)}° / ${jointDeg(air, 'kneeR').toFixed(1)}°)`);
+await shot('combat-jump');
+for (let i = 0; i < 80 && !(await page.evaluate(() => window.__trial.grounded)); i++) await step(4);
+const landed = await pose();
+assert.ok(landed.root.bob < -0.02, `landing absorbs into a crouch (bob ${landed.root.bob.toFixed(3)}m)`);
+
+// --- attack: the lead hand has to drive forward through the swing ---
+await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ' })));
+const swinging = await sample(9, 2);
+await shot('combat-attack');
+const reach = swinging.map(p => Math.max(...p.hands.map(h => h.z)));
+assert.ok(Math.max(...reach) > 0.3, `a hand drives out in front during the swing (got ${Math.max(...reach).toFixed(3)}m)`);
+assert.ok(spread(reach) > 0.15, 'the swing travels instead of holding one pose');
+console.log('attack reach', reach.map(v => v.toFixed(2)).join(' '));
+
+// --- ultimate: readable flourish that leaves the idle stance far behind ---
+for (let i = 0; i < 40 && (await page.evaluate(() => window.__trial.attack)) >= 0; i++) await step(4);
+await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyK' })));
+const ulting = await sample(10, 3);
+await shot('combat-ultimate');
+const overhead = Math.max(...ulting.map(p => Math.max(...p.hands.map(h => h.y))));
+const spun = Math.max(...ulting.map(p => Math.abs(p.root.spin)));
+assert.ok(spun > 1 || overhead > 1.7, `the ultimate spins or raises the staff overhead (spin ${spun.toFixed(2)}, hands ${overhead.toFixed(2)}m)`);
+
+// --- boss: muzzle anchor, telegraph-before-damage, and hitboxes built from the drawn shapes ---
+const info = await boss();
+assert.ok(info, 'boss state is observable');
+assert.ok(info.mouth, 'the boss has a muzzle anchor derived from its bounds');
+const height = 4.2;
+assert.ok(info.mouth[1] > height * 0.45 && info.mouth[1] < height * 1.05,
+  `the muzzle sits in the head, not at the feet (y=${info.mouth[1].toFixed(2)} of a ${height}m boss)`);
+const ahead = (info.mouth[0] - info.position[0]) * Math.sin(info.yaw) + (info.mouth[2] - info.position[2]) * Math.cos(info.yaw);
+assert.ok(ahead > 0.4, `the muzzle is on the front of the body (${ahead.toFixed(2)}m ahead of centre)`);
+
+for (const move of ['slam', 'swipe', 'fire']) {
+  assert.ok(await page.evaluate(m => window.__trial.forceBossMove(m), move), `boss starts ${move}`);
+  const started = await boss();
+  const spec = started.moves[move];
+  assert.equal(started.move, move, `${move} is the active move`);
+  assert.equal(started.struck, false, `${move} telegraphs before anything lands`);
+  // Nothing may land while the tell is still playing.
+  await step(Math.floor(spec.wind * 60 * 0.8));
+  const winding = await boss();
+  assert.equal(winding.move, move, `${move} is still winding up`);
+  assert.equal(winding.struck, false, `${move} has not landed at 80% of its wind-up`);
+  // ...and it must commit soon after, within its own strike window.
+  const committed = b => (move === 'fire' ? !!b.jet : b.struck);
+  let struck = await boss();
+  for (let i = 0; i < 60 && !committed(struck); i++) { await step(2); struck = await boss(); }
+  assert.ok(committed(struck), `${move} lands once its wind-up finishes`);
+  assert.ok(struck.t < spec.wind + spec.strike + 0.2, `${move} lands on schedule (t=${struck.t.toFixed(2)}s)`);
+  await shot(`boss-${move}`);
+  if (move === 'fire') {
+    assert.ok(struck.jet, 'the jet exists while breathing');
+    const gap = Math.hypot(...struck.jet.origin.map((v, i) => v - struck.mouth[i]));
+    assert.ok(gap < 0.4, `the jet starts at the muzzle, not the body centre (off by ${gap.toFixed(3)}m)`);
+    assert.ok(Math.abs(Math.hypot(...struck.jet.dir) - 1) < 1e-3, 'the jet direction is a unit vector');
+    assert.ok(struck.jet.dir[1] < 0.2, 'the jet is angled down toward the player, not at the sky');
+    assert.ok(spec.half > 0.1 && spec.half < 0.7, 'the fire cone keeps a sane spread');
+  }
+  for (let i = 0; i < 400 && (await boss()).move !== null; i++) await step(6);
+  assert.equal((await boss()).move, null, `${move} recovers back to neutral`);
+}
+
+const after = await page.evaluate(() => window.__trial);
+assert.ok(after.enemies[0].hp > 0, 'the boss survived this diagnostic pass');
+assert.ok(after.running, 'the trial is still running');
+assert.deepEqual(errors, []);
+console.log('\ncombat OK');
+await browser.close();

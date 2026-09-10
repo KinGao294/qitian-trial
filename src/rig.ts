@@ -254,7 +254,7 @@ function poseRun(rig: WarriorRig, a: AnimInput, w: number): number {
   for (const arm of rig.arms) {
     const ph = p + (arm.side > 0 ? 0 : Math.PI); // arms oppose the same-side leg
     rig.splay(arm.clavicle, arm.side * 6 * w);
-    rig.splay(arm.upper, arm.side * 26 * w);
+    rig.splay(arm.upper, arm.side * 31 * w);
     rig.swing(arm.upper, (12 + 34 * Math.sin(ph)) * w);
     rig.twist(arm.upper, arm.side * 12 * w);
     rig.swing(arm.fore, (58 + 26 * Math.max(0, Math.sin(ph))) * w);
@@ -280,7 +280,7 @@ function poseAir(rig: WarriorRig, a: AnimInput, w: number): number {
   }
   for (const arm of rig.arms) {
     rig.splay(arm.clavicle, arm.side * (10 + 16 * rise) * w);
-    rig.splay(arm.upper, arm.side * (18 + 22 * rise) * w);
+    rig.splay(arm.upper, arm.side * (26 + 18 * rise) * w);
     rig.swing(arm.upper, (28 + 74 * rise - 20 * fall) * w);
     rig.swing(arm.fore, (50 - 26 * rise + 18 * fall) * w);
   }
@@ -350,7 +350,7 @@ function poseAttack(rig: WarriorRig, combo: number, p: number, w: number, out: R
     rig.splay(arm.clavicle, arm.side * (8 + 10 * push) * w);
     if (combo === 0) {
       // Sweep: the driving arm whips across the body, elbow snapping open at contact.
-      rig.splay(arm.upper, arm.side * (isLead ? 42 - 30 * push : 26) * w);
+      rig.splay(arm.upper, arm.side * (isLead ? 28 + 20 * push : 30) * w);
       rig.swing(arm.upper, (isLead ? curve(p, [[0, -30], [0.26, -46], [0.5, 92], [0.75, 74], [1, 20]])
         : curve(p, [[0, 20], [0.3, 54], [0.55, -14], [1, 12]])) * w);
       rig.twist(arm.upper, arm.side * (isLead ? -18 * drive : 14) * w);
@@ -358,14 +358,14 @@ function poseAttack(rig: WarriorRig, combo: number, p: number, w: number, out: R
         : curve(p, [[0, 60], [0.3, 30], [0.6, 84], [1, 62]])) * w);
     } else if (combo === 1) {
       // Rising strike: driving arm comes from the hip up past the head.
-      rig.splay(arm.upper, arm.side * (isLead ? 20 - 16 * push : 24) * w);
+      rig.splay(arm.upper, arm.side * (isLead ? 26 + 22 * push : 28) * w);
       rig.swing(arm.upper, (isLead ? curve(p, [[0, -20], [0.28, -52], [0.55, 136], [0.78, 118], [1, 26]])
         : curve(p, [[0, 16], [0.3, 40], [0.6, -20], [1, 10]])) * w);
       rig.swing(arm.fore, (isLead ? curve(p, [[0, 92], [0.28, 116], [0.55, 22], [0.8, 46], [1, 60]])
         : curve(p, [[0, 58], [0.3, 26], [0.6, 90], [1, 62]])) * w);
     } else {
       // Slam: both hands overhead, then down together.
-      rig.splay(arm.upper, arm.side * (14 + 8 * (1 - push)) * w);
+      rig.splay(arm.upper, arm.side * (34 + 10 * push) * w);
       rig.swing(arm.upper, curve(p, [[0, 30], [0.3, 152], [0.64, -26], [0.85, 6], [1, 16]]) * w);
       rig.twist(arm.upper, arm.side * 10 * w);
       rig.swing(arm.fore, curve(p, [[0, 60], [0.3, 26], [0.64, 12], [1, 56]]) * w);
@@ -397,7 +397,7 @@ function poseUltimate(rig: WarriorRig, p: number, w: number, out: RootMotion) {
   rig.lean(rig.head, (-18 * gather - 6 * thrust) * w);
   for (const arm of rig.arms) {
     rig.splay(arm.clavicle, arm.side * (10 + 12 * thrust) * w);
-    rig.splay(arm.upper, arm.side * (16 + 10 * gather - 8 * thrust) * w);
+    rig.splay(arm.upper, arm.side * (32 + 12 * gather + 12 * thrust) * w);
     rig.swing(arm.upper, (20 + 140 * gather + 72 * thrust) * w);
     rig.twist(arm.upper, arm.side * (14 - 10 * thrust) * w);
     rig.swing(arm.fore, (58 - 34 * gather - 44 * thrust) * w);
