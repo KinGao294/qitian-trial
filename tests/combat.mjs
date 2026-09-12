@@ -45,6 +45,63 @@ console.log('idle', idle.joints.map(j => `${j.part}=${j.deg.toFixed(0)}`).join('
 assert.ok(jointDeg(idle, 'hipL') < 2 && jointDeg(idle, 'hipR') < 2, 'idle leaves the legs on the bind pose');
 assert.ok(Math.min(jointDeg(idle, 'armL'), jointDeg(idle, 'armR')) > 12, 'idle brings the arms down into a guard');
 
+// ...and it has to keep breathing. Sampled in-page a frame at a time: the torso must never settle
+// on one pose, while the legs must never leave the bind by even a hundredth of a degree.
+const idleTrace = await page.evaluate(() => {
+  const rows = [], at = (p, part) => p.joints.find(j => j.part === part).deg;
+  for (let i = 0; i < 150; i++) {
+    window.__trial.step(1, 1 / 60);
+    const p = window.__trial.pose();
+    rows.push({ chest: at(p, 'chest'), head: at(p, 'head'), hip: Math.max(at(p, 'hipL'), at(p, 'hipR')), bob: p.root.bob });
+  }
+  return rows;
+});
+const idleChest = spread(idleTrace.map(r => r.chest)), idleHead = spread(idleTrace.map(r => r.head));
+const idleHip = Math.max(...idleTrace.map(r => r.hip)), idleBob = spread(idleTrace.map(r => r.bob));
+console.log(`idle drift: chest ${idleChest.toFixed(2)}° head ${idleHead.toFixed(2)}° bob ${idleBob.toFixed(3)}m, legs off bind by ${idleHip.toFixed(4)}°`);
+assert.ok(idleChest > 0.4 && idleHead > 0.4, `the idle keeps breathing (chest ${idleChest.toFixed(2)}°, head ${idleHead.toFixed(2)}°)`);
+assert.ok(idleBob > 0.004 && idleBob < 0.04, `the chest rises without lifting the body off the floor (${idleBob.toFixed(3)}m)`);
+assert.ok(idleHip < 0.05, `2.5s of idle never touches the leg chain (worst ${idleHip.toFixed(4)}°)`);
+
+// --- the shape of a swing: anticipation, a held beat, then one fastest moment ---
+// This is what separates a weighted strike from a limb sliding between two poses, and it is only
+// visible frame by frame — cross-process sampling smears the beats together. Angular *rate* is the
+// honest signal: a pose that has stopped moving has a rate near zero however far from rest it is.
+const swing = await page.evaluate(() => {
+  const rows = [], rate = (p, part) => p.joints.find(j => j.part === part).rate;
+  window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ' }));
+  for (let i = 0; i < 34; i++) {
+    window.__trial.step(1, 1 / 60);
+    const p = window.__trial.pose();
+    rows.push({
+      reach: Math.max(...p.hands.map(h => h.z)),
+      pelvis: rate(p, 'pelvis'),
+      elbow: Math.max(rate(p, 'elbowR'), rate(p, 'elbowL')),
+    });
+  }
+  return rows;
+});
+const swingReach = swing.map(r => r.reach), elbowRate = swing.map(r => r.elbow);
+const iBack = swingReach.indexOf(Math.min(...swingReach)), iOut = swingReach.indexOf(Math.max(...swingReach));
+const fastest = Math.max(...elbowRate), iFastest = elbowRate.indexOf(fastest);
+const medianRate = [...elbowRate].sort((a, b) => a - b)[Math.floor(elbowRate.length / 2)];
+// The quietest frame between winding back and the strike is the held beat.
+const stillest = Math.min(...elbowRate.slice(iBack, iFastest));
+console.log(`swing: hand back at frame ${iBack} (${Math.min(...swingReach).toFixed(2)}m), out at ${iOut} (${Math.max(...swingReach).toFixed(2)}m)`);
+console.log(`swing elbow rate: held ${stillest.toFixed(2)} rad/s → peak ${fastest.toFixed(1)} rad/s at frame ${iFastest} (median ${medianRate.toFixed(1)})`);
+assert.ok(iBack > 0 && iBack < iOut, `the hand winds back before it drives out (back at ${iBack}, out at ${iOut})`);
+assert.ok(Math.min(...swingReach) < swingReach[0] - 0.02, 'the wind-up pulls the guard hand back, not just sideways');
+assert.ok(stillest < fastest * 0.15,
+  `the wind-up parks on a held beat before the strike (${stillest.toFixed(2)} vs peak ${fastest.toFixed(1)} rad/s)`);
+assert.ok(fastest > medianRate * 3.5,
+  `the strike has one moment where it is fastest (peak ${fastest.toFixed(1)} vs median ${medianRate.toFixed(1)} rad/s)`);
+// Kinetic chain: on the frame the strike is quickest, the light link is whipping and the heavy one
+// is still catching up. A single blend rate for every bone cannot produce that gap.
+assert.ok(swing[iFastest].elbow > swing[iFastest].pelvis * 2,
+  `the elbow whips while the pelvis lags (${swing[iFastest].elbow.toFixed(1)} vs ${swing[iFastest].pelvis.toFixed(1)} rad/s)`);
+for (let i = 0; i < 40 && (await page.evaluate(() => window.__trial.attack)) >= 0; i++) await step(4);
+await step(60); // let the combo timer lapse, so the swing sampled later on is 横扫破风 too
+
 // --- run: the stride has to swing the legs, not slide a frozen pose across the courtyard ---
 await page.keyboard.down('KeyW');
 const running = await sample(16, 3);
@@ -77,6 +134,18 @@ await shot('combat-jump');
 for (let i = 0; i < 80 && !(await page.evaluate(() => window.__trial.grounded)); i++) await step(4);
 const landed = await pose();
 assert.ok(landed.root.bob < -0.02, `landing absorbs into a crouch (bob ${landed.root.bob.toFixed(3)}m)`);
+// The crouch has to be paid back too: compress hard, then push out of it. A dip that just fades
+// away reads as the body inflating back to standing rather than springing off the floor.
+const landTrace = await page.evaluate(() => {
+  const rows = [];
+  for (let i = 0; i < 26; i++) { window.__trial.step(1, 1 / 60); rows.push(window.__trial.pose().root.bob); }
+  return rows;
+});
+const deepest = Math.min(landed.root.bob, ...landTrace);
+const recovered = landTrace[landTrace.length - 1];
+console.log(`landing: dips to ${deepest.toFixed(3)}m, back to ${recovered.toFixed(3)}m`);
+assert.ok(deepest < -0.06, `the landing really compresses (${deepest.toFixed(3)}m)`);
+assert.ok(recovered > deepest + 0.05, `and pushes back out of it (${recovered.toFixed(3)}m)`);
 
 // --- attack: the lead hand has to drive forward through the swing ---
 await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ' })));
